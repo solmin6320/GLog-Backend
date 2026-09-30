@@ -4,3 +4,7 @@
 build/
 .gradle/
 out/
+# 프론트 전용 스킬은 커밋하지 않는다
+.claude/skills/design-taste-frontend/
+.claude/skills/frontend-design/
+.claude/skills/ui-ux-pro-max/

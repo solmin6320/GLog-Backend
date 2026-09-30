@@ -29,3 +29,12 @@
 
 - 공통: `jandilog-rules`(코딩·Git 규칙), `jandilog-spec-first`(명세 조회·질문 절차)
 - 전문: `jandilog-graphql-api`, `jandilog-data-layer`, `jandilog-judgment-warning`, `jandilog-testing`, `jandilog-devops`
+
+## 확정된 결정 (2026-10-01, 사용자가 팀에 위임)
+
+| Q | 결정 | 근거 |
+|---|---|---|
+| Q-06 페이지네이션 | **커서 기반, 페이지당 20개** | 화면설계서 E-57 제안. Mongo `_id` 커서와 맞음 |
+| Q-01 초대코드 | **평문 저장**, 팀장이 TM-06에서 다시 확인 가능 | 재발급 불가라 해시로 두면 코드를 잊은 팀이 코드 초대를 영영 못 씀 |
+
+나머지 Q는 해당 코드를 만들기 직전에 같은 방식(근거 제시 후 결정 또는 질문)으로 정하고 이 표에 추가한다.
