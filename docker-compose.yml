@@ -1,0 +1,62 @@
+# 로컬 개발용 DB 3종 (기능명세서 10장, DB명세서 5-3)
+# 운영은 MariaDB만 서버 컨테이너, MongoDB는 Atlas, Redis는 Upstash를 쓴다
+name: jandilog
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: jandilog-mariadb
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    environment:
+      # root 비밀번호는 기동 시 무작위 생성. 앱 계정(DB_USERNAME)으로 접속한다
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      MARIADB_DATABASE: ${DB_NAME:-jandilog}
+      MARIADB_USER: ${DB_USERNAME:-jandilog}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-jandilog}
+    ports:
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # 추방 차단 키가 1년 유지되므로 AOF로 디스크에 남긴다 (DB명세서 2장)
+  redis:
+    image: redis:7-alpine
+    container_name: jandilog-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongodb:
+    image: mongo:7.0
+    container_name: jandilog-mongodb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mariadb-data:
+  redis-data:
+  mongodb-data:

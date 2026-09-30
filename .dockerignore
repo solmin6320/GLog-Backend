@@ -1,0 +1,11 @@
+.git
+.github
+.gradle
+.idea
+.claude
+build
+out
+.env
+docker-compose.yml
+*.md
+백엔드 기획서

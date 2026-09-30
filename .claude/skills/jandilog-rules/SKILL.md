@@ -12,7 +12,7 @@ description: 잔디로그 백엔드 공통 규칙. 코드를 쓰거나 커밋·�
 - 자명한 코드엔 주석을 달지 않는다. 이유가 비자명한 곳(규칙의 근거)만 E-번호·장 번호로 짧게.
 
 ## 코드
-- Java 21, Spring Boot 3.x. 패키지: `com.jandilog.<도메인>.{domain,repository,service,graphql,dto}` (member, team, post, notice, judgment, warning, exemption, profile, admin, common).
+- Java 21, Spring Boot 3.x. 패키지: `com.jandilog.<도메인>.{domain,repository,service,graphql,dto}` (member, team, post, notice, judgment, warning, exemption, profile, admin, common). 공통 설정은 `common.config`.
 - 시간: JVM·스케줄러 모두 `Asia/Seoul`. 주차는 **월요일 `LocalDate`** 로 식별.
 - 경고·판정 같은 불이익 데이터는 MariaDB 트랜잭션 안에서만 변경.
 - 권한은 `@PreAuthorize` 메서드 단위. URL 권한에 기대지 않는다.
@@ -21,7 +21,7 @@ description: 잔디로그 백엔드 공통 규칙. 코드를 쓰거나 커밋·�
 ## Git
 - **main 직접 푸시 금지.** 작업 전 `git branch --show-current`로 확인.
 - 브랜치: `feature/<담당>-<기능>` (예: `feature/team-invite`), 수정 `fix/`, 테스트 `test/`, 인프라 `chore/`.
-- 커밋: `feat|fix|test|chore|docs: 한국어 요약` (72자 이내). 한 커밋 = 한 변경.
+- 커밋: `feat|fix|test|chore|docs: 한국어 요약` (72자 이내). **기능 단위로 1번씩**, 그 기능의 테스트도 **기능 단위로 1번** (기능 커밋과 테스트 커밋은 분리). 여러 기능을 한 커밋에 섞거나 한 기능을 잘게 쪼개지 않는다.
 - **커밋 + 푸시까지만.** PR 생성 금지(사용자가 직접). `--force`, `--no-verify` 금지.
 - `README.md`는 수정하지 않는다.
 - 비밀값(.env, 키, 토큰) 커밋 금지.
