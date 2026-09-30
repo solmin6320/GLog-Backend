@@ -1,0 +1,56 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.16'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.jandilog'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+// 기획서 10장 스택 범위만 둔다. AWS SDK(S3)·QueryDSL은 해당 기능 시점에 추가
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-graphql'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-mysql'
+	runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 실행 가능한 jar 하나만 만든다 (Dockerfile에서 app.jar로 복사)
+tasks.named('jar') {
+	enabled = false
+}
+
+tasks.named('bootJar') {
+	archiveFileName = 'app.jar'
+}
+
+// JVM 기본 시간대를 Asia/Seoul로 고정
+tasks.named('bootRun') {
+	jvmArgs '-Duser.timezone=Asia/Seoul'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	systemProperty 'user.timezone', 'Asia/Seoul'
+}
