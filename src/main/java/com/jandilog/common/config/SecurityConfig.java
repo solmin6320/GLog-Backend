@@ -1,19 +1,31 @@
 package com.jandilog.common.config;
 
+import java.net.URI;
+import java.time.Duration;
+import java.util.List;
+
 import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.jandilog.common.security.ClientAwareAuthorizationRequestRepository;
+import com.jandilog.common.security.MemberJwtAuthenticationConverter;
 import com.jandilog.common.security.OAuthLoginFailureHandler;
 import com.jandilog.common.security.OAuthLoginSuccessHandler;
+import com.jandilog.common.security.SecurityErrorResponder;
 
 @Configuration
 @EnableWebSecurity
@@ -37,14 +49,46 @@ public class SecurityConfig {
 		return http.build();
 	}
 
-	// 임시 골격: 헬스체크만 허용하고 나머지는 차단. JWT 검증 체인은 다음 커밋에서 교체
+	// 그 밖의 모든 요청: 세션 없이 Bearer JWT만 검사한다.
+	// /graphql은 일회용 코드 교환이 비로그인이라 URL에서는 열고, 권한은 @PreAuthorize와 AnonymousAccessGuard가 맡는다
 	@Bean
 	@Order(2)
-	SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
-		http.authorizeHttpRequests(auth -> auth
-				.requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
-				.anyRequest().denyAll());
+	SecurityFilterChain apiFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
+			MemberJwtAuthenticationConverter jwtConverter, SecurityErrorResponder errorResponder) throws Exception {
+		http.cors(Customizer.withDefaults())
+				// 쿠키 인증을 쓰지 않는 Bearer 전용 API
+				.csrf(AbstractHttpConfigurer::disable)
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.authorizeHttpRequests(auth -> auth
+						.requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
+						.requestMatchers("/graphql", "/error").permitAll()
+						.anyRequest().authenticated())
+				.oauth2ResourceServer(resourceServer -> resourceServer
+						.jwt(jwt -> jwt.decoder(jwtDecoder).jwtAuthenticationConverter(jwtConverter))
+						.authenticationEntryPoint(errorResponder)
+						.accessDeniedHandler(errorResponder))
+				.exceptionHandling(handling -> handling
+						.authenticationEntryPoint(errorResponder)
+						.accessDeniedHandler(errorResponder));
 		return http.build();
+	}
+
+	// CORS는 웹 도메인 하나만 허용한다. 앱은 출처 개념이 없어 해당 없음 (기능명세서 10장)
+	@Bean
+	CorsConfigurationSource corsConfigurationSource(AuthProperties properties) {
+		URI web = URI.create(properties.webBaseUrl());
+		String origin = web.getScheme() + "://" + web.getAuthority();
+
+		CorsConfiguration cors = new CorsConfiguration();
+		cors.setAllowedOrigins(List.of(origin));
+		cors.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+		cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		cors.setAllowCredentials(false);
+		cors.setMaxAge(Duration.ofHours(1));
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", cors);
+		return source;
 	}
 
 }
