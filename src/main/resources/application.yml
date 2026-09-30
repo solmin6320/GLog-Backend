@@ -9,6 +9,18 @@ spring:
       # 임시 사용자·생성 비밀번호 로그 방지. 인증 구현 시 JwtDecoder 등 자체 빈으로 대체
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
 
+  # GitHub OAuth App. 값은 환경변수로만 받는다 (기본값 없음)
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            scope: read:user
+            # GitHub OAuth App에 등록한 콜백 주소. 백엔드 공개 주소 기준 한 곳
+            redirect-uri: ${BACKEND_BASE_URL:http://localhost:8080}/login/oauth2/code/{registrationId}
+
   # MariaDB (utf8mb4, DB명세서 1-0). 접속 정보는 환경변수, 기본값은 로컬 docker-compose 값
   datasource:
     url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:jandilog}?connectionCollation=utf8mb4_general_ci
@@ -44,6 +56,24 @@ spring:
 
   jackson:
     time-zone: Asia/Seoul
+
+# OAuth 인증 요청을 잇는 동안에만 세션을 쓴다. 그 뒤 세션은 버린다
+server:
+  servlet:
+    session:
+      timeout: 10m
+      cookie:
+        http-only: true
+        same-site: lax
+        # 운영(HTTPS)에서는 true
+        secure: ${SESSION_COOKIE_SECURE:false}
+
+jandilog:
+  auth:
+    # 로그인 후 돌아갈 웹 주소. CORS 허용 출처도 이 값을 쓴다
+    web-base-url: ${WEB_BASE_URL:http://localhost:5173}
+    # 앱 딥링크 (제안 상태)
+    app-deep-link: ${APP_DEEP_LINK:jandilog://auth}
 
 # 헬스체크만 노출하고 Redis는 제외 (Upstash 명령 수 절약, 기능명세서 10장)
 management:
