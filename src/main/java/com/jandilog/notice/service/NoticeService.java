@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.List;
 
@@ -65,7 +66,7 @@ public class NoticeService {
 		String title = normalizeTitle(input.title());
 		String content = normalizeContent(input.content());
 		Notice notice = Notice.create(title, content, Boolean.TRUE.equals(input.isPinned()), adminId,
-				LocalDateTime.now(clock));
+				now());
 		return NoticeResponse.from(noticeRepository.saveAndFlush(notice));
 	}
 
@@ -73,7 +74,7 @@ public class NoticeService {
 	public NoticeResponse update(String noticeId, NoticeInput input) {
 		Notice notice = find(noticeId);
 		notice.edit(normalizeTitle(input.title()), normalizeContent(input.content()),
-				Boolean.TRUE.equals(input.isPinned()), LocalDateTime.now(clock));
+				Boolean.TRUE.equals(input.isPinned()), now());
 		return NoticeResponse.from(noticeRepository.saveAndFlush(notice));
 	}
 
@@ -93,6 +94,11 @@ public class NoticeService {
 		}
 		noticeRepository.delete(notice);
 		noticeRepository.flush();
+	}
+
+	// notice.created_at·updated_at은 DATETIME(초)이라 응답에 싣는 시각도 초로 맞춘다
+	private LocalDateTime now() {
+		return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 	}
 
 	private Notice find(String noticeId) {
