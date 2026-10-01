@@ -1,0 +1,45 @@
+# 가입 승인 (기능명세서 1·9장, 관리자 전용)
+
+extend type Query {
+    "가입 승인 탭 목록. 오래된 신청부터 커서 기반 20개"
+    adminMembers(
+        "기본은 승인 대기. ALL은 승인 대기와 거절"
+        status: MemberApprovalFilter = PENDING
+        "이름·GitHub 아이디 부분 일치 (50자 이하)"
+        keyword: String
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminMemberPage!
+}
+
+extend type Mutation {
+    "승인 대기 회원을 승인한다"
+    approveMember(memberId: ID!): AdminMember!
+    "승인 대기 회원을 거절한다. 관리자 행동 로그가 남는다"
+    rejectMember(memberId: ID!): AdminMember!
+    "거절된 회원을 승인 대기로 되돌린다"
+    revertMemberToPending(memberId: ID!): AdminMember!
+}
+
+enum MemberApprovalFilter {
+    PENDING
+    REJECTED
+    ALL
+}
+
+type AdminMember {
+    id: ID!
+    githubLogin: String!
+    nickname: String!
+    status: MemberStatus!
+    "신청 시각 (KST, ISO-8601)"
+    createdAt: String!
+}
+
+type AdminMemberPage {
+    items: [AdminMember!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+    "현재 조건의 전체 건수"
+    totalCount: Int!
+}

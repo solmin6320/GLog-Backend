@@ -1,0 +1,129 @@
+# 게시판 (기능명세서 3장): 트러블슈팅·개발일지 글, 태그, 검색, 댓글. 모든 회원 호출 가능, 수정·삭제는 작성자 본인만
+
+extend type Query {
+    """
+    게시판 목록. 최신순, 커서 기반 20개.
+    tag는 정확히 일치하는 태그, q는 제목·내용·태그 검색(앞뒤 공백 제외 2~50자, 공백으로 나눈 단어를 모두 포함한 글).
+    q·tag는 함께 쓰면 둘 다 만족하는 글만 나온다
+    """
+    posts(type: PostType!, tag: String, q: String, "이전 페이지의 nextCursor" after: String): PostPage!
+    "글 상세. 없으면 NOT_FOUND, 삭제된 글은 POST_DELETED"
+    post(id: ID!): Post!
+    "태그 필터에 보여줄 많이 쓰인 태그 상위 10개. type을 생략하면 두 종류 전체"
+    popularTags(type: PostType): [TagCount!]!
+}
+
+extend type Mutation {
+    "글을 쓴다. 필수 항목을 모두 채우지 않아도 저장되지만 기록글로 인정되지 않는다(isRecord=false)"
+    createPost(input: CreatePostInput!): Post!
+    "글을 고친다 (작성자 본인만). 글 종류와 작성일은 바뀌지 않는다"
+    updatePost(id: ID!, input: UpdatePostInput!): Post!
+    "글을 지운다 (작성자 본인만, 소프트 삭제)"
+    deletePost(id: ID!): Boolean!
+    "댓글을 쓴다. 삭제된 글에는 달 수 없다 (1~500자)"
+    createComment(postId: ID!, content: String!): Comment!
+    "댓글을 고친다 (작성자 본인만)"
+    updateComment(id: ID!, content: String!): Comment!
+    "댓글을 지운다 (작성자 본인만, 소프트 삭제)"
+    deleteComment(id: ID!): Boolean!
+}
+
+enum PostType {
+    TROUBLESHOOTING
+    DEVLOG
+}
+
+"종류별 본문 항목. 트러블슈팅은 problem·cause·solution, 개발일지는 did·learned만 값이 있다"
+type PostSections {
+    problem: String
+    cause: String
+    solution: String
+    did: String
+    learned: String
+}
+
+type Post {
+    id: ID!
+    "작성자 회원 id. 본인 글 여부(수정·삭제 버튼) 판단에 쓴다"
+    authorId: ID!
+    author: BoardAuthor!
+    "연결된 팀 id. 없으면 null. 팀 이름은 teamName(team.graphqls에서 확장, 비공개 팀은 숨김)"
+    teamId: ID
+    type: PostType!
+    title: String!
+    sections: PostSections!
+    "정규화된 태그(앞뒤 공백 제거, 소문자). 글당 최대 5개"
+    tags: [String!]!
+    commitUrls: [String!]!
+    "필수 항목을 모두 채웠는가. false면 '인증 미포함' 배지 (E-25)"
+    isRecord: Boolean!
+    "최초 저장일(KST, yyyy-MM-dd). 수정해도 바뀌지 않는다"
+    writtenDate: String!
+    "작성 시각 (KST, ISO-8601)"
+    createdAt: String!
+    "수정 시각 (KST, ISO-8601). 수정 전에는 createdAt과 같다"
+    updatedAt: String!
+    commentCount: Int!
+    "오래된 순. 대댓글 없음"
+    comments: [Comment!]!
+}
+
+type Comment {
+    id: ID!
+    postId: ID!
+    authorId: ID!
+    author: BoardAuthor!
+    content: String!
+    createdAt: String!
+    updatedAt: String!
+}
+
+type BoardAuthor {
+    id: ID!
+    nickname: String!
+    profileImageUrl: String
+}
+
+type PostPage {
+    items: [Post!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+    "현재 조건(종류·태그·검색어)의 전체 글 수. 요청했을 때만 센다"
+    totalCount: Int!
+}
+
+type TagCount {
+    tag: String!
+    count: Int!
+}
+
+input PostSectionsInput {
+    problem: String
+    cause: String
+    solution: String
+    did: String
+    learned: String
+}
+
+input CreatePostInput {
+    type: PostType!
+    "1~60자"
+    title: String!
+    "글 종류에 해당하는 항목만 쓰이고 나머지는 무시된다"
+    sections: PostSectionsInput!
+    "최대 5개, 개당 20자"
+    tags: [String!]
+    "https://github.com/{owner}/{repo}/commit/{sha} 형식만 허용. 실제 존재 여부는 확인하지 않는다"
+    commitUrls: [String!]
+    "연결할 팀 id (선택). 지금 내가 소속인 삭제되지 않은 팀만 가능하고, 아니면 POST_TEAM_INVALID"
+    teamId: ID
+}
+
+"모든 값을 통째로 바꾼다. 생략한 tags·commitUrls·teamId는 비워진다"
+input UpdatePostInput {
+    title: String!
+    sections: PostSectionsInput!
+    tags: [String!]
+    commitUrls: [String!]
+    teamId: ID
+}
