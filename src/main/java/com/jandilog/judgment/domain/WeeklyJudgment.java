@@ -17,6 +17,9 @@ import jakarta.persistence.Table;
 @Table(name = "weekly_judgment")
 public class WeeklyJudgment {
 
+	// 자동 재시도 상한 (Q-07: 10분 간격 3회). 소진되면 관리자 보류 목록에 오른다
+	public static final int MAX_AUTO_RETRIES = 3;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -106,6 +109,11 @@ public class WeeklyJudgment {
 
 	public boolean isConfirmed() {
 		return status.isConfirmed();
+	}
+
+	// 아직 자동 재시도가 남은 보류. 아이디 불일치는 재시도로 풀리지 않아 대상이 아니다 (Q-09)
+	public boolean isAutoRetryPending() {
+		return status == JudgmentStatus.HOLD && holdReason == HoldReason.API_ERROR && retryCount < MAX_AUTO_RETRIES;
 	}
 
 	public Long getId() {

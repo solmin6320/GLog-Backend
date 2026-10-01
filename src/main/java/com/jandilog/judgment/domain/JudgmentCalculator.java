@@ -64,9 +64,9 @@ public final class JudgmentCalculator {
 		return JudgmentResult.judged(pass, verifiedDays, recordCount, days, now);
 	}
 
-	// 판정 제외·면제 사유. 해당 없으면 null.
+	// 판정 제외·면제 사유. 해당 없으면 null. 호출한 쪽이 잔디 조회가 필요한 주인지 먼저 가리는 데도 쓴다.
 	// 면제 기간과 개인 면제가 겹치면 둘 다 보존되고 판정은 제외된다(E-44). 기록할 사유는 명세에 우선순위가 없어 면제 기간을 앞에 둔다
-	private static SkipReason skipReason(JudgmentInput input) {
+	public static SkipReason skipReason(JudgmentInput input) {
 		if (input.teamIdsAtWeekEnd().isEmpty()) {
 			return SkipReason.NO_TEAM;
 		}
