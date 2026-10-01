@@ -1,0 +1,10 @@
+# 서버의 배포 사용자 crontab 예시. 실제 등록은 사람이 한다 (crontab -e 로 붙여 넣기)
+# 경로는 배포 디렉터리 ~/jandilog 기준. 배포 사용자는 docker 그룹이어야 한다
+# CRON_TZ는 Ubuntu 기본 cron이 지원한다. 시각은 서울 기준이다
+CRON_TZ=Asia/Seoul
+
+# MariaDB 덤프 → S3, 일 1회 (기획서에 시각 규정 없음. 06:00 잔디 갱신·07:00 판정과 겹치지 않게 04:30)
+30 4 * * * $HOME/jandilog/deploy/backup/mariadb-backup.sh >> $HOME/jandilog/backup.log 2>&1
+
+# Let's Encrypt 갱신 확인. 만료 30일 전부터 갱신되고, 평소에는 아무 일도 하지 않는다. 끝나면 nginx가 새 인증서를 읽도록 reload
+17 3 * * * { cd $HOME/jandilog && docker compose -f docker-compose.prod.yml run --rm -T certbot renew --quiet && docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload; } >> $HOME/jandilog/certbot.log 2>&1
