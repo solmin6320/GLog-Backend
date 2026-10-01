@@ -1,0 +1,89 @@
+# 관리자 (기능명세서 9장). 웹 전용, 관리자 권한은 대메뉴 6개(대시보드 · 경고 복구·벌칙 · 가입 승인 · 면제 관리 · 공지 관리 · 게시물 관리) 안에서만.
+# 가입 승인은 member-approval, 면제 관리는 exemption, 공지 관리는 notice 스키마에 있다
+
+extend type Query {
+    """
+    판정 정정 재계산 미리보기 (대시보드 정정 패널, E-49 · E-50 · E-58). 계산만 하고 아무것도 바꾸지 않는다.
+    정정할 수 없는 판정(보류, 같은 결과, 제외를 면제가 아닌 결과로)은 JUDGMENT_NOT_CORRECTABLE
+    """
+    previewJudgmentCorrection(judgmentId: ID!, status: AdminCorrectionStatus!): JudgmentCorrectionPreview!
+}
+
+extend type Mutation {
+    """
+    판정을 정정하고 경고를 다시 계산한다 (관리자). 결과는 통과·미달·면제 셋뿐이고 사유는 필수(1~500자).
+    제외(첫 참가·팀 없음) 판정은 면제로만 정정한다. 이력과 관리자 행동 로그가 남는다.
+    expectedStatus가 지금 판정과 다르면 JUDGMENT_CHANGED
+    """
+    correctJudgment(input: JudgmentCorrectionInput!): CorrectedJudgment!
+}
+
+"이름 · GitHub 아이디 (관리자 목록에 붙는 회원 표시)"
+type AdminMemberBrief {
+    id: ID!
+    nickname: String!
+    githubLogin: String!
+}
+
+enum AdminJudgmentStatus {
+    PASS
+    FAIL
+    EXEMPT
+    "첫 참가 주 · 팀 없음"
+    EXCLUDED
+    "GitHub 조회 실패로 아직 확정하지 못함"
+    HOLD
+}
+
+"정정으로 만들 수 있는 결과 (Q-05)"
+enum AdminCorrectionStatus {
+    PASS
+    FAIL
+    EXEMPT
+}
+
+"""
+정정 · 소급 면제 · 경고 복구의 재계산 영향.
+onHold면 보류 중인 주가 있어 경고 수를 비교하지 않는다(null). recordOnly면 벌칙 이행 이전 주라 기록만 바뀌고 경고 수는 그대로다 (E-58 · E-59)
+"""
+type AdminRecalcImpact {
+    onHold: Boolean!
+    warningCountBefore: Int
+    warningCountAfter: Int
+    "벌칙 대상에 새로 들어간다 (E-42)"
+    entersPenalty: Boolean!
+    "벌칙 대상에서 빠진다 (E-50)"
+    leavesPenalty: Boolean!
+    recordOnly: Boolean!
+    "그 주 이후 다시 계산되는 판정 수"
+    affectedWeeks: Int!
+}
+
+input JudgmentCorrectionInput {
+    judgmentId: ID!
+    status: AdminCorrectionStatus!
+    "필수, 1~500자"
+    reason: String!
+    "미리보기 때 본 현재 결과. 다르면 JUDGMENT_CHANGED"
+    expectedStatus: AdminJudgmentStatus
+}
+
+type JudgmentCorrectionPreview {
+    judgmentId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    currentStatus: AdminJudgmentStatus!
+    targetStatus: AdminJudgmentStatus!
+    impact: AdminRecalcImpact!
+}
+
+"정정 반영 뒤의 판정과 그 회원의 경고 상태. warningCount는 보류 주가 남아 있으면 null"
+type CorrectedJudgment {
+    judgmentId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    status: AdminJudgmentStatus!
+    onHold: Boolean!
+    warningCount: Int
+    penaltyTarget: Boolean!
+}

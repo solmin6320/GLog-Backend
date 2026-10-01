@@ -96,7 +96,7 @@ public final class WarningRecalculator {
 
 	// 주가 끝난 시각(다음 월요일 00:00)이 이행 시각 이하면 이행 전에 이미 지나간 주다.
 	// 이행한 주는 아직 판정 전이므로 이후로 센다
-	static boolean isBeforeBaseline(LocalDate weekStart, LocalDateTime fulfilledAt) {
+	public static boolean isBeforeBaseline(LocalDate weekStart, LocalDateTime fulfilledAt) {
 		return fulfilledAt != null && !JudgmentWeek.endExclusive(weekStart).isAfter(fulfilledAt);
 	}
 
