@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
@@ -57,7 +58,7 @@ public class PostService {
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
 		Long teamId = PostInputRules.teamId(input.teamId());
 
-		Instant now = clock.instant();
+		Instant now = now();
 		// ObjectId 시각을 서버 시계에 맞춰 _id 순서와 createdAt 순서가 같게 한다
 		Post post = Post.create(new ObjectId(Date.from(now)), memberId, teamId, type, title, sections, tags, commitUrls,
 				LocalDate.now(clock), now);
@@ -83,7 +84,7 @@ public class PostService {
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
 		Long teamId = PostInputRules.teamId(input.teamId());
 
-		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, clock.instant());
+		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, now());
 		// 그 사이 삭제됐으면 바뀌지 않는다 (EX-BD04-02)
 		Optional<Post> previous = postRepository.replaceIfAlive(replacement);
 		if (previous.isEmpty()) {
@@ -103,7 +104,7 @@ public class PostService {
 		Post current = loadAlive(postId);
 		requireAuthor(current, memberId);
 
-		if (!postRepository.softDelete(current.getId(), clock.instant())) {
+		if (!postRepository.softDelete(current.getId(), now())) {
 			throw new ApiException(ErrorCode.POST_DELETED);
 		}
 		try {
@@ -151,6 +152,11 @@ public class PostService {
 			throw new ApiException(ErrorCode.POST_DELETED);
 		}
 		return post;
+	}
+
+	// Mongo는 밀리초까지만 저장하므로 응답에 싣는 시각도 밀리초로 맞춘다
+	private Instant now() {
+		return clock.instant().truncatedTo(ChronoUnit.MILLIS);
 	}
 
 	static ObjectId parseId(String id) {
