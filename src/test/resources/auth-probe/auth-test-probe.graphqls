@@ -1,0 +1,15 @@
+# 테스트 전용 루트 필드. 상태·역할별 접근과 비로그인 차단을 시험하려고 둔다 (운영 스키마 아님)
+
+extend type Query {
+    "@PreAuthorize가 없는 필드. 비로그인 차단은 AnonymousAccessGuard가 맡는다"
+    probeOpen: String!
+    "ACTIVE 회원 이상만 (hasRole MEMBER)"
+    probeMember: String!
+    "예상 못 한 예외를 던지는 필드"
+    probeFail: String!
+}
+
+extend type Mutation {
+    "ACTIVE 회원 이상만 (hasRole MEMBER)"
+    probeMemberWrite: String!
+}

@@ -14,9 +14,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jandilog.common.config.AuthProperties;
 
 // 로컬 docker-compose DB(MariaDB·Redis)와 실제 HTTP 서버를 쓰는 통합 테스트 공통 바탕
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// 테스트 전용 probe 스키마는 auth-probe/에 둔다. graphql/에 두면 classpath: 위치가 첫 폴더만 읽어서 운영 스키마가 가려진다
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+		properties = "spring.graphql.schema.locations=classpath:graphql/**/,classpath:auth-probe/**/")
 @ActiveProfiles("test")
-@Import(AuthTestConfig.class)
+@Import({AuthTestConfig.class, AuthProbeController.class})
 public abstract class AuthIntegrationTest {
 
 	@LocalServerPort

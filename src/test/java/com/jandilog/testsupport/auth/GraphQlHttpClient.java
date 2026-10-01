@@ -58,6 +58,30 @@ public class GraphQlHttpClient {
 		}
 	}
 
+	// GraphQL이 아닌 경로(헬스체크, 노출되지 않은 actuator 등)를 GET으로 부른다
+	public GraphQlResponse get(String path, String bearerToken) {
+		try {
+			HttpRequest.Builder request = HttpRequest.newBuilder(uri.resolve(path)).GET();
+			if (bearerToken != null) {
+				request.header("Authorization", "Bearer " + bearerToken);
+			}
+			HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+			JsonNode body;
+			try {
+				body = response.body() == null || response.body().isBlank()
+						? MissingNode.getInstance() : mapper.readTree(response.body());
+			} catch (IOException notJson) {
+				body = MissingNode.getInstance();
+			}
+			return new GraphQlResponse(response.statusCode(), body, response.headers(), response.body());
+		} catch (IOException e) {
+			throw new IllegalStateException("GET 호출 실패", e);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("GET 호출 중단", e);
+		}
+	}
+
 	public record GraphQlResponse(int status, JsonNode body, HttpHeaders headers, String rawBody) {
 
 		public JsonNode data() {
@@ -70,6 +94,14 @@ public class GraphQlHttpClient {
 
 		public String errorCode() {
 			return body.path("errors").path(0).path("extensions").path("code").asText(null);
+		}
+
+		public String errorClassification() {
+			return body.path("errors").path(0).path("extensions").path("classification").asText(null);
+		}
+
+		public boolean dataIsNull() {
+			return data().isNull() || data().isMissingNode();
 		}
 
 		public String errorMessage() {
