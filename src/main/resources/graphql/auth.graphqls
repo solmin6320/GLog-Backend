@@ -1,0 +1,38 @@
+# 로그인·회원 (기능명세서 1장). 다른 도메인 스키마는 `extend type Query`·`extend type Mutation`으로 잇는다
+
+type Query {
+    "내 계정 정보. 승인 대기·거절 계정도 호출할 수 있다"
+    me: Me!
+}
+
+type Mutation {
+    "GitHub 로그인 뒤 받은 일회용 코드를 액세스 토큰으로 바꾼다. 코드는 한 번만 쓸 수 있다"
+    exchangeAuthCode(code: String!): AuthPayload!
+}
+
+enum MemberStatus {
+    PENDING
+    ACTIVE
+    REJECTED
+}
+
+enum MemberRole {
+    MEMBER
+    ADMIN
+}
+
+type Me {
+    id: ID!
+    githubLogin: String!
+    nickname: String!
+    profileImageUrl: String
+    status: MemberStatus!
+    role: MemberRole!
+}
+
+type AuthPayload {
+    accessToken: String!
+    "액세스 토큰 유효 시간(초)"
+    expiresIn: Int!
+    me: Me!
+}

@@ -7,5 +7,7 @@ build
 out
 .env
 docker-compose.yml
+docker-compose.prod.yml
+deploy
 *.md
 백엔드 기획서

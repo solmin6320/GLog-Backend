@@ -1,0 +1,126 @@
+# 운영 구성: Lightsail 2GB 한 대 (기능명세서 10장, DB명세서 5-1)
+# MariaDB만 서버 컨테이너. MongoDB는 Atlas, Redis는 Upstash를 쓰므로 여기에 두지 않는다
+# 로컬 개발은 docker-compose.yml. 이 파일은 서버의 ~/jandilog 에서 -f docker-compose.prod.yml 로 쓴다
+#
+# 시크릿: 값은 서버의 ~/jandilog/.env(chmod 600, 커밋 금지)에만 둔다. GitHub에는 올리지 않는다
+#   키 목록은 .env.example, 관리 방식은 deploy/RUNBOOK.md
+#   앱 컨테이너에는 아래 environment에 적은 키만 넘긴다 (백업용 AWS 키 등은 앱에 노출하지 않는다)
+#
+# 메모리 배분 (2GB 중, 컨테이너 상한 합 약 1.5GB + OS·Docker 약 0.3GB)
+#   app      mem_limit 960m  = 힙 -Xmx640m + 메타스페이스·코드 캐시·스레드 스택
+#   mariadb  mem_limit 512m  = innodb_buffer_pool_size 256M (deploy/mariadb/jandilog.cnf)
+#   nginx    mem_limit 48m
+name: jandilog-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: jandilog-prod-mariadb
+    restart: unless-stopped
+    environment:
+      # root 비밀번호는 기동 시 무작위 생성. 앱 계정(DB_USERNAME)으로만 접속한다
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      MARIADB_DATABASE: ${DB_NAME:?DB_NAME 필요}
+      MARIADB_USER: ${DB_USERNAME:?DB_USERNAME 필요}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 필요}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./deploy/mariadb/jandilog.cnf:/etc/mysql/conf.d/jandilog.cnf:ro
+    mem_limit: 512m
+    # 포트는 호스트에 열지 않는다. 같은 compose 네트워크의 app만 접속한다
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+
+  app:
+    # deploy/deploy.sh 가 받은 이미지를 jandilog-app:current 로 태그한다 (이전 것은 :previous)
+    image: jandilog-app:current
+    pull_policy: never
+    container_name: jandilog-prod-app
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 힙 512~768MB 안쪽(10장 스킬 기준). OOM이면 종료해서 restart 정책으로 다시 띄운다
+      JAVA_OPTS: >-
+        -Xms256m -Xmx640m
+        -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=64m
+        -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError
+      # nginx 뒤에서 X-Forwarded-Proto/-For를 해석한다 (Tomcat 내부 프록시 대역에서 온 것만 신뢰)
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      # MariaDB는 같은 compose 네트워크의 컨테이너
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:?DB_NAME 필요}
+      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME 필요}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 필요}
+      # 외부 관리형 서비스 (Atlas, Upstash)
+      MONGODB_URI: ${MONGODB_URI:?MONGODB_URI 필요}
+      REDIS_HOST: ${REDIS_HOST:?REDIS_HOST 필요}
+      REDIS_PORT: ${REDIS_PORT:?REDIS_PORT 필요}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD 필요}
+      REDIS_SSL: ${REDIS_SSL:?REDIS_SSL 필요}
+      # 주소는 https만 허용된다 (ProdProfileValidator)
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL:?BACKEND_BASE_URL 필요}
+      WEB_BASE_URL: ${WEB_BASE_URL:?WEB_BASE_URL 필요}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID 필요}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET 필요}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 필요}
+      # 선택값: .env에 있을 때만 전달한다. 없으면 설정하지 않아 application.yml 기본값이 적용된다
+      JWT_EXPIRES_MINUTES:
+      APP_DEEP_LINK:
+      ADMIN_GITHUB_IDS:
+      # 잔디 조회 구현 후 사용 (CLAUDE.md 확정 결정)
+      GITHUB_API_TOKEN:
+    mem_limit: 960m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # Flyway 마이그레이션 + 기동 시간
+      start_period: 90s
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.30-alpine
+    container_name: jandilog-prod-nginx
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN 필요}
+      # 이미지가 DOMAIN만 치환하도록 한정한다 ($host 등 nginx 변수 보호)
+      NGINX_ENVSUBST_FILTER: ^DOMAIN$$
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/templates:/etc/nginx/templates:ro
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    mem_limit: 48m
+    logging: *default-logging
+
+  # 인증서 발급·갱신 전용. 상시 실행하지 않고 docker compose run --rm certbot ... 으로만 쓴다
+  certbot:
+    image: certbot/certbot:v5.8.0
+    profiles: ["tools"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    mem_limit: 128m
+
+volumes:
+  mariadb-data:
+  letsencrypt:
+  certbot-webroot:
