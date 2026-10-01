@@ -88,6 +88,132 @@ type CorrectedJudgment {
     penaltyTarget: Boolean!
 }
 
+# ---- 대시보드 (AD-01 ⑤~⑨) ----
+
+extend type Query {
+    "처리 대기 요약 (AD-01 ⑤). 메뉴 배지도 같은 값을 쓴다"
+    adminDashboardSummary: AdminDashboardSummary!
+    """
+    주차별 판정 결과 (AD-01 ⑥⑦⑧). weekStart를 생략하면 직전 주(이번 월요일 판정의 대상), 월요일이 아니면 INVALID_INPUT.
+    keyword는 닉네임·GitHub 아이디 부분 일치(50자 이하). 집계는 검색·필터와 무관한 그 주 전체 값이고 팀 이름은 싣지 않는다
+    """
+    adminJudgments(
+        weekStart: String
+        keyword: String
+        filter: AdminJudgmentFilter = ALL
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminJudgmentPage!
+    "보류 목록 (AD-01 ⑨). 사람이 처리해야 하는 보류만 오래된 순 커서 기반 20개. totalCount가 0이면 보류 표시를 그리지 않는다"
+    adminJudgmentHolds(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminHoldPage!
+}
+
+extend type Mutation {
+    "보류 한 건을 다시 판정한다 (관리자). 이미 확정된 건은 건너뛰고 현재 결과를 돌려준다. 판정 행이 없으면 NOT_FOUND"
+    retryJudgmentHold(memberId: ID!, weekStart: String!): AdminHoldRetryResult!
+    "사람이 처리해야 하는 보류 건만 모두 다시 판정한다 (관리자, E-35). 확정된 건은 건드리지 않는다"
+    retryAllJudgmentHolds: AdminHoldRerunSummary!
+}
+
+enum AdminJudgmentFilter {
+    ALL
+    FAIL_ONLY
+    HOLD_ONLY
+}
+
+"판정에서 빠진 이유. NO_TEAM · FIRST_WEEK은 제외, EXEMPTION_PERIOD · PERSONAL_EXEMPTION은 면제"
+enum AdminSkipReason {
+    NO_TEAM
+    FIRST_WEEK
+    EXEMPTION_PERIOD
+    PERSONAL_EXEMPTION
+}
+
+"보류 이유. API_ERROR는 재시도로 풀리고 IDENTITY_MISMATCH는 본인이 다시 로그인해야 풀린다 (E-08)"
+enum AdminHoldReason {
+    API_ERROR
+    IDENTITY_MISMATCH
+}
+
+type AdminDashboardSummary {
+    "이번 주 미달이 세는 판정 주 월요일 (직전 주)"
+    judgedWeekStart: String!
+    pendingMembers: Int!
+    "judgedWeekStart의 미달 판정 수"
+    failedMembers: Int!
+    penaltyTargets: Int!
+    pendingExemptions: Int!
+}
+
+"판정 결과 한 행. warningCount는 보류 주가 남은 회원이면 null. manualHold는 사람이 처리해야 하는 보류"
+type AdminJudgmentRow {
+    judgmentId: ID!
+    member: AdminMemberBrief!
+    status: AdminJudgmentStatus!
+    skipReason: AdminSkipReason
+    holdReason: AdminHoldReason
+    verifiedDays: Int
+    recordCount: Int
+    warningCount: Int
+    corrected: Boolean!
+    manualHold: Boolean!
+}
+
+"""
+한 주의 집계와 회원별 결과. executedAt은 그 주 판정이 확정된 마지막 시각(KST, 없으면 null).
+holdCount는 사람이 처리해야 하는 보류만 센다
+"""
+type AdminJudgmentPage {
+    weekStart: String!
+    weekEnd: String!
+    executedAt: String
+    passCount: Int!
+    failCount: Int!
+    exemptCount: Int!
+    firstWeekCount: Int!
+    holdCount: Int!
+    items: [AdminJudgmentRow!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+type AdminHold {
+    member: AdminMemberBrief!
+    weekStart: String!
+    reason: AdminHoldReason!
+    retryCount: Int!
+    "자동 재시도 3회를 다 썼는가"
+    retriesExhausted: Boolean!
+}
+
+type AdminHoldPage {
+    items: [AdminHold!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+    totalCount: Int!
+    "그중 본인이 다시 로그인해야 풀리는 건수"
+    identityMismatchCount: Int!
+}
+
+type AdminHoldRetryResult {
+    member: AdminMemberBrief!
+    weekStart: String!
+    status: AdminJudgmentStatus!
+    holdReason: AdminHoldReason
+    "이번 재시도로 보류가 풀려 확정됐는가"
+    resolved: Boolean!
+}
+
+type AdminHoldRerunSummary {
+    attempted: Int!
+    resolved: Int!
+    stillHold: Int!
+    failed: Int!
+}
+
 # ---- 경고 복구 · 벌칙 (AD-01 `warnings`, 기능명세서 6·9장) ----
 
 extend type Query {

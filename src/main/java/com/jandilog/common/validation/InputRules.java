@@ -2,6 +2,7 @@ package com.jandilog.common.validation;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.Locale;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
@@ -9,6 +10,8 @@ import com.jandilog.judgment.domain.JudgmentWeek;
 
 // 면제·정정·관리자 입력의 공통 검증. 규칙을 어기면 ApiException
 public final class InputRules {
+
+	static final int KEYWORD_MAX_LENGTH = 50;
 
 	private InputRules() {
 	}
@@ -37,6 +40,30 @@ public final class InputRules {
 			// 아래에서 같은 오류로 처리
 		}
 		throw new ApiException(ErrorCode.INVALID_INPUT);
+	}
+
+	// 관리자 검색어(50자 이하). 비었으면 null, 길면 잘못된 입력
+	public static String keyword(String raw) {
+		if (raw == null || raw.isBlank()) {
+			return null;
+		}
+		String keyword = raw.strip();
+		if (keyword.codePointCount(0, keyword.length()) > KEYWORD_MAX_LENGTH) {
+			throw new ApiException(ErrorCode.INVALID_INPUT);
+		}
+		return keyword;
+	}
+
+	// keyword(null이면 전체)를 부분 일치 LIKE 패턴으로. 소문자로 맞추고 와일드카드는 글자 그대로 찾는다 (이스케이프 '!')
+	public static String likePattern(String keyword) {
+		if (keyword == null) {
+			return "%";
+		}
+		String escaped = keyword.toLowerCase(Locale.ROOT)
+				.replace("!", "!!")
+				.replace("%", "!%")
+				.replace("_", "!_");
+		return "%" + escaped + "%";
 	}
 
 	// 앞뒤 공백을 뺀 사유. 비었으면 requiredError, maxLength(글자 수)를 넘으면 잘못된 입력
