@@ -87,3 +87,111 @@ type CorrectedJudgment {
     warningCount: Int
     penaltyTarget: Boolean!
 }
+
+# ---- 경고 복구 · 벌칙 (AD-01 `warnings`, 기능명세서 6·9장) ----
+
+extend type Query {
+    "벌칙 대상 목록 (경고 3개 이상). 도달한 주가 오래된 순 커서 기반 20명. 이 화면에서만 비공개 팀도 실명으로 보인다"
+    adminPenaltyTargets(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminPenaltyTargetPage!
+    """
+    삭제 표시된 경고 목록 (추방 · 팀 삭제). 삭제가 최근인 순 커서 기반 20개.
+    정정 · 소급 면제로 미달이 아니게 된 주의 경고는 나오지 않는다
+    """
+    adminDeletedWarnings(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminDeletedWarningPage!
+    """
+    경고를 복구하면 바뀌는 수치 미리보기 (E-42 · E-43 · E-59). 계산만 하고 아무것도 바꾸지 않는다.
+    삭제된 경고가 아니면 ALREADY_HANDLED, 복구 대상이 아니면 NOT_FOUND
+    """
+    previewWarningRestore(warningId: ID!): AdminWarningRestorePreview!
+}
+
+extend type Mutation {
+    """
+    벌칙 이행을 체크한다 (관리자). 경고 0 · 연속 통과 0이 되고 되돌릴 수 없는 고정점이 된다 (E-58).
+    벌칙 대상이 아니면 NOT_PENALTY_TARGET. 관리자 행동 로그가 남는다
+    """
+    fulfillPenalty(memberId: ID!): AdminPenaltyFulfillment!
+    """
+    삭제된 경고를 복구한다 (관리자). 삭제 표시를 풀고 아직 있는 팀의 카테고리를 되살린 뒤 경고를 다시 계산한다.
+    벌칙 이행 이전 주의 경고는 기록만 되살아난다 (E-59). 이미 복구됐으면 ALREADY_HANDLED. 관리자 행동 로그가 남는다
+    """
+    restoreWarning(warningId: ID!): AdminRestoredWarning!
+}
+
+"경고에 붙은 팀. 이 화면에서는 비공개 팀도 실명이다"
+type AdminWarningTeam {
+    id: ID!
+    name: String!
+}
+
+type AdminPenaltyTarget {
+    member: AdminMemberBrief!
+    "3을 넘을 수 있다"
+    warningCount: Int!
+    "경고가 3개에 도달한 주 월요일"
+    reachedWeek: String!
+    teams: [AdminWarningTeam!]!
+}
+
+type AdminPenaltyTargetPage {
+    items: [AdminPenaltyTarget!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+    totalCount: Int!
+}
+
+type AdminPenaltyFulfillment {
+    member: AdminMemberBrief!
+    "이행 체크 시각 (KST, ISO-8601)"
+    fulfilledAt: String!
+    reachedWeek: String!
+}
+
+enum AdminWarningDeleteReason {
+    KICKED
+    TEAM_DELETED
+}
+
+"restoreTeams는 복구하면 되살아나는 카테고리. teamDeleted면 그런 팀이 없어 '삭제된 팀'으로 표시된다 (E-43)"
+type AdminDeletedWarning {
+    warningId: ID!
+    member: AdminMemberBrief!
+    "경고를 받은 주 월요일"
+    weekStart: String!
+    deleteReason: AdminWarningDeleteReason!
+    deletedAt: String!
+    restoreTeams: [AdminWarningTeam!]!
+    teamDeleted: Boolean!
+}
+
+type AdminDeletedWarningPage {
+    items: [AdminDeletedWarning!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+"impact.entersPenalty면 '다시 벌칙 대상이 됩니다'(E-42), impact.recordOnly면 '기록만 되살립니다'(E-59), teamDeleted면 '삭제된 팀으로 표시됩니다'(E-43)"
+type AdminWarningRestorePreview {
+    warningId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    restoreTeams: [AdminWarningTeam!]!
+    teamDeleted: Boolean!
+    impact: AdminRecalcImpact!
+}
+
+"복구를 반영한 뒤 그 회원의 경고 상태. warningCount는 보류 주가 남아 있으면 null"
+type AdminRestoredWarning {
+    warningId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    onHold: Boolean!
+    warningCount: Int
+    penaltyTarget: Boolean!
+}
