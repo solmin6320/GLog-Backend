@@ -75,6 +75,9 @@ jandilog:
       issuer: jandilog
       # 기획서에 만료 시간 규정 없음. 기본 24시간, 만료되면 재로그인 (E-03)
       expires-minutes: ${JWT_EXPIRES_MINUTES:1440}
+  grass:
+    # 잔디 조회용 GitHub 서버 토큰. 기본값 없음, 환경변수로만 받고 로그에 남기지 않는다
+    github-api-token: ${GITHUB_API_TOKEN}
 
 # 헬스체크만 노출하고 Redis는 제외 (Upstash 명령 수 절약, 기능명세서 10장)
 management:
