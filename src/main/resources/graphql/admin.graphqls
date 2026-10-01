@@ -321,3 +321,58 @@ type AdminRestoredWarning {
     warningCount: Int
     penaltyTarget: Boolean!
 }
+
+# ---- 게시물 관리 (AD-01 `posts`, 기능명세서 3·9장) ----
+
+extend type Query {
+    """
+    글 · 댓글 목록 (관리자). 삭제되지 않은 것을 최신순 커서 기반 20개로 한 줄에 섞어 보여준다.
+    keyword는 제목 · 내용 · 작성자(닉네임 · GitHub 아이디) 부분 일치(50자 이하). 팀 정보는 싣지 않는다
+    """
+    adminPosts(
+        filter: AdminPostFilter = ALL
+        keyword: String
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminPostPage!
+}
+
+extend type Mutation {
+    "글을 삭제한다 (관리자, 소프트 삭제). 이미 삭제된 글은 POST_DELETED, 없는 글은 NOT_FOUND. 관리자 행동 로그가 남는다"
+    adminDeletePost(postId: ID!): Boolean!
+    "댓글을 삭제한다 (관리자, 소프트 삭제). 없거나 이미 삭제된 댓글은 NOT_FOUND. 관리자 행동 로그가 남는다"
+    adminDeleteComment(commentId: ID!): Boolean!
+}
+
+"글 + 댓글 / 글만 / 댓글만"
+enum AdminPostFilter {
+    ALL
+    POSTS
+    COMMENTS
+}
+
+enum AdminPostKind {
+    POST
+    COMMENT
+}
+
+"""
+게시물 관리 한 행. 글이면 id와 postId가 같고 content는 null.
+댓글이면 title에 글 제목, content에 댓글 내용(앞 100자)이 담기고 postId로 글 상세에 이동한다
+"""
+type AdminPostItem {
+    kind: AdminPostKind!
+    id: ID!
+    postId: ID!
+    title: String!
+    content: String
+    author: AdminMemberBrief!
+    "작성 시각 (KST, ISO-8601)"
+    createdAt: String!
+}
+
+type AdminPostPage {
+    items: [AdminPostItem!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
