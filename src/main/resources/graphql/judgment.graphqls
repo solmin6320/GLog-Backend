@@ -1,0 +1,118 @@
+# 내 주간 활동·판정 (기능명세서 5장, 화면설계서 CM-01 이번 주 진행·AC-01). 본인 것만 조회한다
+
+extend type Query {
+    """
+    내 주간 활동. weekStart는 월요일 날짜(yyyy-MM-dd), 생략하면 이번 주, 미래 주는 INVALID_INPUT.
+    잔디는 하루 한 번 새벽에 갱신한 캐시를 그대로 보여주고 이 쿼리가 GitHub를 부르지 않는다(grassFetchedAt이 갱신 기준 시각).
+    기록글 수는 실시간이다. 판정이 끝난 주는 판정 시점에 저장한 값을 보여준다
+    """
+    myWeeklyActivity(weekStart: String): WeeklyActivity!
+    "내 지난 판정 목록 (AC-01 ⑤). 최근 주부터 커서 기반 20개"
+    myJudgmentHistory(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): JudgmentHistoryPage!
+}
+
+"판정 결과. HOLD는 GitHub 조회 실패로 아직 확정하지 못한 상태이고 진행 중인 주와 다르다"
+enum JudgmentStatus {
+    PASS
+    FAIL
+    EXEMPT
+    EXCLUDED
+    HOLD
+}
+
+"판정에서 빠진 이유. NO_TEAM·FIRST_WEEK은 제외, EXEMPTION_PERIOD·PERSONAL_EXEMPTION은 면제"
+enum JudgmentSkipReason {
+    NO_TEAM
+    FIRST_WEEK
+    EXEMPTION_PERIOD
+    PERSONAL_EXEMPTION
+}
+
+"보류 이유. API_ERROR는 재시도로 풀리고 IDENTITY_MISMATCH는 본인이 다시 로그인해야 풀린다"
+enum JudgmentHoldReason {
+    API_ERROR
+    IDENTITY_MISMATCH
+}
+
+"이번 주 화면 상단 배너 후보. 동시에 해당하면 위에서부터 하나만 내려온다"
+enum ActivityBanner {
+    "GitHub 비공개 기여 표시가 꺼진 듯함 (E-39)"
+    CONTRIBUTIONS_HIDDEN
+    "잔디를 아직 못 불러옴 (E-32)"
+    GRASS_NOT_LOADED
+    "계정 생애 첫 팀 참가 주 (E-36)"
+    FIRST_WEEK
+    "면제 주간 (E-46)"
+    EXEMPTION_WEEK
+}
+
+type WeeklyActivity {
+    "그 주 월요일 (yyyy-MM-dd)"
+    weekStart: String!
+    "그 주 일요일 (yyyy-MM-dd)"
+    weekEnd: String!
+    currentWeek: Boolean!
+    "지금 소속된 팀이 있는가. 없으면 판정 대상이 아니다"
+    inTeam: Boolean!
+    "월~일 7행"
+    days: [ActivityDay!]!
+    "인증일 수. 잔디를 못 불러와 알 수 없으면 null"
+    verifiedDays: Int
+    recordCount: Int!
+    requiredVerifiedDays: Int!
+    requiredRecordCount: Int!
+    "이번 주 통과 예정인가. 이번 주를 볼 때만 있고 인증일을 모르면 null"
+    passExpected: Boolean
+    "잔디 캐시가 있는가"
+    grassAvailable: Boolean!
+    "잔디 갱신 기준 시각 (KST, ISO-8601). 저장된 판정을 보여줄 때는 null"
+    grassFetchedAt: String
+    "이번 주를 볼 때 배너 하나. 없으면 null"
+    banner: ActivityBanner
+    "그 주의 판정 결과. 아직 판정 전이면 null"
+    judgment: WeekJudgment
+}
+
+"날짜별 인증 한 행. null은 알 수 없음(안 불러왔거나 갱신 전이거나 저장하지 않은 값)"
+type ActivityDay {
+    date: String!
+    hasGrass: Boolean
+    "잔디 기여 수. 판정이 끝난 주는 저장하지 않아 null"
+    grassCount: Int
+    hasRecord: Boolean!
+    "기록글 수. 판정이 끝난 주는 저장하지 않아 null"
+    recordCount: Int
+}
+
+"한 주의 판정 결과. 제외·면제·보류 주는 인증일·기록글이 null"
+type WeekJudgment {
+    status: JudgmentStatus!
+    skipReason: JudgmentSkipReason
+    holdReason: JudgmentHoldReason
+    verifiedDays: Int
+    recordCount: Int
+    "관리자 정정을 거쳤는가"
+    corrected: Boolean!
+    "확정 시각 (KST, ISO-8601)"
+    judgedAt: String
+}
+
+type JudgmentHistoryItem {
+    weekStart: String!
+    weekEnd: String!
+    status: JudgmentStatus!
+    skipReason: JudgmentSkipReason
+    holdReason: JudgmentHoldReason
+    verifiedDays: Int
+    recordCount: Int
+    corrected: Boolean!
+}
+
+type JudgmentHistoryPage {
+    items: [JudgmentHistoryItem!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
