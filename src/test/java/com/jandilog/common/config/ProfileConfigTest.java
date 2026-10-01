@@ -128,6 +128,24 @@ class ProfileConfigTest {
 				.isInstanceOf(IllegalArgumentException.class);
 	}
 
+	// ----- 첫 관리자 지정(ADMIN_GITHUB_IDS) -----
+
+	@Test
+	void ADMIN_GITHUB_IDS_기본값은_비어_있고_환경변수로_받는다() {
+		assertThat(environment(false, Map.of()).getProperty("jandilog.admin.github-ids")).isEmpty();
+		assertThat(environment(false, Map.of("ADMIN_GITHUB_IDS", "11,22")).getProperty("jandilog.admin.github-ids"))
+				.isEqualTo("11,22");
+	}
+
+	@Test
+	void prod에서도_ADMIN_GITHUB_IDS는_선택값이라_없어도_읽을_수_있다() {
+		assertThat(environment(true, allProdVariables()).getProperty("jandilog.admin.github-ids")).isEmpty();
+
+		Map<String, String> variables = new HashMap<>(allProdVariables());
+		variables.put("ADMIN_GITHUB_IDS", "12345678");
+		assertThat(environment(true, variables).getProperty("jandilog.admin.github-ids")).isEqualTo("12345678");
+	}
+
 	// ----- 새 기본값 -----
 
 	@Test
