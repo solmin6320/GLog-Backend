@@ -1,0 +1,20 @@
+# 운영 MariaDB 메모리 설정 (Lightsail 2GB, DB명세서 5-1: MariaDB 256~512MB)
+# 컨테이너 상한 512MB 안에서 버퍼 풀 256MB + 연결·임시 테이블 여유를 둔다
+# 이 파일을 고치면 mariadb 컨테이너를 직접 재시작해야 반영된다 (docker compose restart mariadb)
+[mysqld]
+character-set-server = utf8mb4
+collation-server     = utf8mb4_general_ci
+
+innodb_buffer_pool_size = 256M
+innodb_log_buffer_size  = 8M
+
+# InnoDB만 쓰므로 MyISAM·Aria 캐시는 최소로 둔다
+key_buffer_size             = 8M
+aria_pagecache_buffer_size  = 16M
+tmp_table_size              = 32M
+max_heap_table_size         = 32M
+
+# 앱 커넥션 풀 10개 + 백업·관리 접속 여유
+max_connections = 50
+performance_schema = OFF
+skip-name-resolve

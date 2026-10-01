@@ -1,0 +1,66 @@
+# 리버스 프록시 + HTTPS (기능명세서 10장: 도메인 + Nginx + Let's Encrypt)
+# nginx 이미지가 기동 때 환경변수 DOMAIN 하나만 치환해 conf.d/default.conf로 만든다 (nginx 변수는 그대로 둔다)
+
+# 도메인이 아닌 Host(IP 직접 접속 등)는 응답 없이 끊는다
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+
+# 80: 인증서 발급·갱신 경로(webroot)와 HTTPS 리다이렉트
+server {
+    listen 80;
+    server_name ${DOMAIN};
+    server_tokens off;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+    server_tokens off;
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:5m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # 프로필 사진 5MB(화면설계서 E-56, 제안) + multipart 여유. 사진 용량이 바뀌면 같이 바꾼다
+    client_max_body_size 6m;
+
+    # 앱 컨테이너가 재시작 중이어도 nginx는 뜨고 502만 낸다 (기동 때 upstream 해석 안 함)
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $app_upstream http://app:8080;
+
+    # 클라이언트가 보낸 X-Forwarded-*는 믿지 않고 nginx가 본 값으로 덮어쓴다
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # 외부에는 헬스체크만 연다. 나머지 /actuator는 앱 설정(health만 노출)과 별개로 여기서도 막는다
+    location = /actuator/health {
+        proxy_pass $app_upstream;
+    }
+
+    location ~ ^/actuator {
+        return 404;
+    }
+
+    location / {
+        proxy_pass $app_upstream;
+    }
+}
