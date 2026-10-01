@@ -1,0 +1,23 @@
+# 내 경고 요약 (기능명세서 6장, 화면설계서 CM-01 ④·AC-02 ①②). 경고 이력 표는 Q-13 결정 뒤에 잇는다
+
+extend type Query {
+    """
+    내 경고 요약. 저장된 카운트가 아니라 판정 이력을 처음부터 다시 훑어 계산한 값이다.
+    판정 보류가 남아 있으면 계산을 미뤄 onHold만 true이고 숫자는 null이다
+    """
+    myWarningSummary: WarningSummary!
+}
+
+type WarningSummary {
+    onHold: Boolean!
+    "보류 중인 주차 월요일 목록 (yyyy-MM-dd)"
+    holdWeeks: [String!]!
+    "벌칙 이행 이후 살아 있고 차감되지 않은 경고 수. 3을 넘을 수 있다"
+    warningCount: Int
+    "지금 연속 통과 수. 2가 되면 경고 1개를 차감하고 0으로 돌아간다. 벌칙 대상이면 쌓지 않아 0"
+    streak: Int
+    "경고 3개 이상이면 벌칙 대상. 이 상태에서는 연속 통과해도 차감되지 않는다"
+    penaltyTarget: Boolean
+    "경고가 3개에 도달한 주 월요일 (yyyy-MM-dd). 벌칙 대상일 때만"
+    penaltyReachedWeek: String
+}
