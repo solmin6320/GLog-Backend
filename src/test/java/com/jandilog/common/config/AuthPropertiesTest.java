@@ -184,7 +184,7 @@ class AuthPropertiesTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(longs = {1, 1440, 43_200})
+	@ValueSource(longs = {1, 720, 1440, 43_200})
 	void 만료_시간_경계값은_허용한다(long minutes) {
 		assertThatCode(() -> new Jwt(SECRET, "jandilog", minutes)).doesNotThrowAnyException();
 	}
