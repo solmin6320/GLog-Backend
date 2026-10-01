@@ -13,7 +13,7 @@ import com.jandilog.common.config.AuthProperties;
 // 로그인 결과 복귀 주소: 웹은 /auth/callback, 앱은 딥링크. 토큰은 싣지 않는다 (기능명세서 1장)
 class LoginRedirectorTest {
 
-	private static final String SECRET = "unit-test-secret-key-0123456789-abcdef";
+	private static final String SECRET = "unit-test-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz";
 
 	private final LoginRedirector redirector = new LoginRedirector(new AuthProperties(
 			"https://jandi.example.com/", "jandilog://auth", new AuthProperties.Jwt(SECRET, "jandilog", 60)));
@@ -44,6 +44,20 @@ class LoginRedirectorTest {
 
 		assertThat(response.getStatus()).isEqualTo(302);
 		assertThat(response.getHeader("Location")).isEqualTo("jandilog://auth?code=abc_DEF-123");
+	}
+
+	@Test
+	void 기본_딥링크_고유_스킴으로도_코드와_오류가_그대로_실린다() throws IOException {
+		LoginRedirector defaultLink = new LoginRedirector(new AuthProperties("https://jandi.example.com",
+				"com.jandilog.app://auth", new AuthProperties.Jwt(SECRET, "jandilog", 60)));
+		MockHttpServletResponse code = new MockHttpServletResponse();
+		MockHttpServletResponse error = new MockHttpServletResponse();
+
+		defaultLink.sendCode(requestFrom(LoginClient.APP), code, "abc_DEF-123");
+		defaultLink.sendError(requestFrom(LoginClient.APP), error, "rejected");
+
+		assertThat(code.getHeader("Location")).isEqualTo("com.jandilog.app://auth?code=abc_DEF-123");
+		assertThat(error.getHeader("Location")).isEqualTo("com.jandilog.app://auth?error=rejected");
 	}
 
 	@Test
