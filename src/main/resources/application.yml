@@ -60,17 +60,17 @@ server:
       cookie:
         http-only: true
         same-site: lax
-        # 운영(HTTPS)에서는 true
-        secure: ${SESSION_COOKIE_SECURE:false}
+        # 기본 true. 로컬에서 브라우저가 http://localhost의 Secure 쿠키를 거부하면 SESSION_COOKIE_SECURE=false
+        secure: ${SESSION_COOKIE_SECURE:true}
 
 jandilog:
   auth:
     # 로그인 후 돌아갈 웹 주소. CORS 허용 출처도 이 값을 쓴다
     web-base-url: ${WEB_BASE_URL:http://localhost:5173}
-    # 앱 딥링크 (제안 상태)
-    app-deep-link: ${APP_DEEP_LINK:jandilog://auth}
+    # 앱 딥링크 (제안 상태). 다른 앱의 코드 가로채기를 줄이려고 고유 스킴(역도메인형)을 기본값으로 쓴다
+    app-deep-link: ${APP_DEEP_LINK:com.jandilog.app://auth}
     jwt:
-      # HS256 서명 키(32바이트 이상). 기본값 없음, 환경변수로만 받는다
+      # HS256 서명 키(43자 이상 무작위, openssl rand -base64 48). 기본값 없음, 환경변수로만 받는다
       secret: ${JWT_SECRET}
       issuer: jandilog
       # 기획서에 만료 시간 규정 없음. 기본 24시간, 만료되면 재로그인 (E-03)
