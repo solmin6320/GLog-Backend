@@ -15,8 +15,9 @@ import jakarta.persistence.LockModeType;
 
 public interface TeamRepository extends JpaRepository<Team, Long> {
 
-	// 삭제된 팀 포함. 호출하는 쪽이 deleted_at을 본다
-	Optional<Team> findByInviteCodeAndDeletedAtIsNull(String inviteCode);
+	// 삭제되지 않은 팀의 id만 읽는다. 엔티티를 영속성 컨텍스트에 올리지 않아야 뒤따르는 팀 행 잠금이 최신 값을 읽는다
+	@Query("select t.id from Team t where t.inviteCode = :inviteCode and t.deletedAt is null")
+	Optional<Long> findAliveIdByInviteCode(@Param("inviteCode") String inviteCode);
 
 	boolean existsByInviteCode(String inviteCode);
 
