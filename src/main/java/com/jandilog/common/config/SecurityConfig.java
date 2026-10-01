@@ -49,8 +49,8 @@ public class SecurityConfig {
 		return http.build();
 	}
 
-	// 그 밖의 모든 요청: 세션 없이 Bearer JWT만 검사한다.
-	// /graphql은 일회용 코드 교환이 비로그인이라 URL에서는 열고, 권한은 @PreAuthorize와 AnonymousAccessGuard가 맡는다
+	// 그 밖의 모든 요청: 세션 없이 Bearer JWT만 검사한다. 허용 목록 밖은 ACTIVE 회원(ROLE_MEMBER)만 통과.
+	// /graphql은 일회용 코드 교환이 비로그인이라 URL에서는 열고, 권한은 @PreAuthorize와 RootFieldAccessGuard가 맡는다
 	@Bean
 	@Order(2)
 	SecurityFilterChain apiFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
@@ -62,7 +62,7 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
 						.requestMatchers("/graphql", "/error").permitAll()
-						.anyRequest().authenticated())
+						.anyRequest().hasRole("MEMBER"))
 				.oauth2ResourceServer(resourceServer -> resourceServer
 						.jwt(jwt -> jwt.decoder(jwtDecoder).jwtAuthenticationConverter(jwtConverter))
 						.authenticationEntryPoint(errorResponder)
