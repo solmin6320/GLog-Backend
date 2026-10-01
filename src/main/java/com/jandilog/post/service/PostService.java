@@ -26,6 +26,7 @@ import com.jandilog.post.dto.TagCount;
 import com.jandilog.post.dto.UpdatePostInput;
 import com.jandilog.post.repository.PostRepository;
 import com.jandilog.post.repository.PostSearchCondition;
+import com.jandilog.team.service.TeamAccessService;
 
 // 게시판 글 작성·수정·삭제·상세·목록 (기능명세서 3장).
 // 쓰기는 MongoDB를 먼저, post_index를 나중에 쓴다. 분산 트랜잭션은 쓰지 않고, 색인 쓰기가 실패하면
@@ -40,11 +41,14 @@ public class PostService {
 
 	private final PostRepository postRepository;
 	private final PostIndexService postIndexService;
+	private final TeamAccessService teamAccess;
 	private final Clock clock;
 
-	public PostService(PostRepository postRepository, PostIndexService postIndexService, Clock clock) {
+	public PostService(PostRepository postRepository, PostIndexService postIndexService,
+			TeamAccessService teamAccess, Clock clock) {
 		this.postRepository = postRepository;
 		this.postIndexService = postIndexService;
+		this.teamAccess = teamAccess;
 		this.clock = clock;
 	}
 
@@ -56,6 +60,8 @@ public class PostService {
 		List<String> tags = PostInputRules.tags(input.tags());
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
 		Long teamId = PostInputRules.teamId(input.teamId());
+		// 지금 내가 소속인 삭제되지 않은 팀만 연결할 수 있다
+		teamAccess.requireLinkable(teamId, memberId);
 
 		Instant now = clock.instant();
 		// ObjectId 시각을 서버 시계에 맞춰 _id 순서와 createdAt 순서가 같게 한다
@@ -82,6 +88,10 @@ public class PostService {
 		List<String> tags = PostInputRules.tags(input.tags());
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
 		Long teamId = PostInputRules.teamId(input.teamId());
+		// 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않는다(팀에서 나간 뒤에도 내용은 고칠 수 있게). 새로 연결하거나 바꿀 때만 소속을 본다
+		if (teamId != null && !teamId.equals(current.getTeamId())) {
+			teamAccess.requireLinkable(teamId, memberId);
+		}
 
 		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, clock.instant());
 		// 그 사이 삭제됐으면 바뀌지 않는다 (EX-BD04-02)
