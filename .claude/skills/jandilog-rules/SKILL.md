@@ -21,11 +21,12 @@ description: 잔디로그 백엔드 공통 규칙. 코드를 쓰거나 커밋·�
 ## Git
 - **main 직접 푸시 금지.** 작업 전 `git branch --show-current`로 확인.
 - 브랜치: `feature/<담당>-<기능>` (예: `feature/team-invite`), 수정 `fix/`, 테스트 `test/`, 인프라 `chore/`.
-- 커밋: `feat|fix|test|chore|docs: 한국어 요약` (72자 이내). **기능 단위로 1번씩**, 그 기능의 테스트도 **기능 단위로 1번** (기능 커밋과 테스트 커밋은 분리). 여러 기능을 한 커밋에 섞거나 한 기능을 잘게 쪼개지 않는다.
+- 커밋: `feat|fix|test|chore|docs: 한국어 요약` (72자 이내). **비슷한 기능을 묶은 적당한 크기**로, 테스트도 같은 방식으로 (기능 커밋과 테스트 커밋은 분리). 무관한 도메인을 한 커밋에 섞거나 한 기능을 잘게 쪼개지 않는다.
 - **커밋 + 푸시까지만.** PR 생성 금지(사용자가 직접). `--force`, `--no-verify` 금지.
 - `README.md`는 수정하지 않는다.
 - 비밀값(.env, 키, 토큰) 커밋 금지.
+- 브랜치는 직접 삭제하지 않는다. main 머지 확인 후 총괄이 로컬·원격 모두 삭제.
 
 ## 의존성
-- **기획서 기술 스택에 없는 의존성은 추가하지 않는다.** 허용 범위: Spring Boot, Spring for GraphQL, Spring Security(OAuth2 Client·JWT), Spring Data JPA, Spring Data MongoDB, Spring Data Redis, Flyway, MariaDB 드라이버, Spring Scheduler, AWS SDK for Java(S3), JUnit, (선택) QueryDSL.
+- **기획서 기술 스택에 없는 의존성은 추가하지 않는다.** 허용 범위: Spring Boot, Spring for GraphQL, Spring Security(OAuth2 Client·JWT), Spring Data JPA, Spring Data MongoDB, Spring Data Redis, Flyway, MariaDB 드라이버, Spring Scheduler, AWS SDK for Java(S3), JUnit, (선택) QueryDSL. 개발 편의 도구 **Lombok, Spring Boot DevTools**는 사용자가 허용.
 - 위 밖이 필요하면 `build.gradle`을 건드리지 말고 사용자에게 이유와 함께 묻는다.
