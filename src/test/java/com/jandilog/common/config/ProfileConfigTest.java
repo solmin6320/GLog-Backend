@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,10 +91,30 @@ class ProfileConfigTest {
 	}
 
 	@Test
-	void JWT_만료_기본값은_1440분으로_그대로다() {
-		assertThat(environment(false, Map.of()).getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("1440");
+	void JWT_만료_기본값은_720분_12시간이다() {
+		assertThat(environment(false, Map.of()).getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("720");
 		assertThat(environment(true, allProdVariables()).getProperty("jandilog.auth.jwt.expires-minutes"))
-				.isEqualTo("1440");
+				.isEqualTo("720");
+	}
+
+	@Test
+	void JWT_만료는_환경변수로_바꿀_수_있다() {
+		assertThat(environment(false, Map.of("JWT_EXPIRES_MINUTES", "60"))
+				.getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("60");
+		Map<String, String> prod = new HashMap<>(allProdVariables());
+		prod.put("JWT_EXPIRES_MINUTES", "1440");
+		assertThat(environment(true, prod).getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("1440");
+	}
+
+	@Test
+	void 기본_만료로_발급한_토큰은_12시간_뒤에_끝나고_범위_검증은_그대로다() {
+		long minutes = Long.parseLong(environment(false, Map.of()).getProperty("jandilog.auth.jwt.expires-minutes"));
+		AuthProperties.Jwt jwt = new AuthProperties.Jwt(SECRET, "jandilog", minutes);
+
+		assertThat(Duration.ofMinutes(jwt.expiresMinutes())).isEqualTo(Duration.ofHours(12));
+		assertThatThrownBy(() -> new AuthProperties.Jwt(SECRET, "jandilog", 0)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new AuthProperties.Jwt(SECRET, "jandilog", 43_201))
+				.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test
@@ -105,6 +126,24 @@ class ProfileConfigTest {
 				.isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> prod.getProperty("jandilog.auth.jwt.secret"))
 				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	// ----- 첫 관리자 지정(ADMIN_GITHUB_IDS) -----
+
+	@Test
+	void ADMIN_GITHUB_IDS_기본값은_비어_있고_환경변수로_받는다() {
+		assertThat(environment(false, Map.of()).getProperty("jandilog.admin.github-ids")).isEmpty();
+		assertThat(environment(false, Map.of("ADMIN_GITHUB_IDS", "11,22")).getProperty("jandilog.admin.github-ids"))
+				.isEqualTo("11,22");
+	}
+
+	@Test
+	void prod에서도_ADMIN_GITHUB_IDS는_선택값이라_없어도_읽을_수_있다() {
+		assertThat(environment(true, allProdVariables()).getProperty("jandilog.admin.github-ids")).isEmpty();
+
+		Map<String, String> variables = new HashMap<>(allProdVariables());
+		variables.put("ADMIN_GITHUB_IDS", "12345678");
+		assertThat(environment(true, variables).getProperty("jandilog.admin.github-ids")).isEqualTo("12345678");
 	}
 
 	// ----- 새 기본값 -----

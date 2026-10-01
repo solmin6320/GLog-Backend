@@ -47,7 +47,7 @@ type Post {
     "작성자 회원 id. 본인 글 여부(수정·삭제 버튼) 판단에 쓴다"
     authorId: ID!
     author: BoardAuthor!
-    "연결된 팀 id. 없으면 null. 팀 이름·공개 여부 처리는 팀 기능 합류 뒤에 붙는다"
+    "연결된 팀 id. 없으면 null. 팀 이름은 teamName(team.graphqls에서 확장, 비공개 팀은 숨김)"
     teamId: ID
     type: PostType!
     title: String!
@@ -115,7 +115,7 @@ input CreatePostInput {
     tags: [String!]
     "https://github.com/{owner}/{repo}/commit/{sha} 형식만 허용. 실제 존재 여부는 확인하지 않는다"
     commitUrls: [String!]
-    "연결할 팀 id (선택). 팀 소속 검증은 팀 기능 합류 뒤에 붙는다"
+    "연결할 팀 id (선택). 지금 내가 소속인 삭제되지 않은 팀만 가능하고, 아니면 POST_TEAM_INVALID"
     teamId: ID
 }
 
