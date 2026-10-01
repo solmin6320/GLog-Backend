@@ -72,7 +72,15 @@ public class GrassCacheService {
 	}
 
 	public Optional<GrassSnapshot> find(long memberId, LocalDate date) {
-		String json = redis.opsForValue().get(key(memberId, date));
+		String json;
+		try {
+			json = redis.opsForValue().get(key(memberId, date));
+		}
+		catch (DataAccessException e) {
+			// Redis 장애는 캐시가 없는 것으로 본다. 화면은 "잔디를 아직 못 불러왔어요"로 보이고 500이 나지 않는다
+			log.warn("잔디 캐시를 읽지 못했어요 memberId={} type={}", memberId, e.getClass().getSimpleName());
+			return Optional.empty();
+		}
 		if (json == null) {
 			return Optional.empty();
 		}

@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import com.jandilog.common.exception.ApiException;
@@ -101,8 +100,8 @@ public class MemberJudgmentService {
 			log.warn("잔디 조회 실패로 보류 memberId={} weekStart={} reason={}", member.getId(), weekStart, e.getReason());
 			return GrassLookup.failed(e.getReason());
 		}
-		catch (IllegalArgumentException | DataAccessException e) {
-			// 조회 구간이 너무 오래됐거나 Redis 장애: 잔디를 확보하지 못했으니 틀린 판정 대신 보류한다
+		catch (IllegalArgumentException e) {
+			// 조회 구간이 GitHub 조회 한도를 넘을 만큼 오래됨: 잔디를 확보하지 못했으니 틀린 판정 대신 보류한다
 			log.warn("잔디 확보 실패로 보류 memberId={} weekStart={} type={}", member.getId(), weekStart,
 					e.getClass().getSimpleName());
 			return GrassLookup.failed(HoldReason.API_ERROR);
