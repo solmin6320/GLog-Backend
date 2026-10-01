@@ -20,6 +20,12 @@ extend type Mutation {
     updatePost(id: ID!, input: UpdatePostInput!): Post!
     "글을 지운다 (작성자 본인만, 소프트 삭제)"
     deletePost(id: ID!): Boolean!
+    "댓글을 쓴다. 삭제된 글에는 달 수 없다 (1~500자)"
+    createComment(postId: ID!, content: String!): Comment!
+    "댓글을 고친다 (작성자 본인만)"
+    updateComment(id: ID!, content: String!): Comment!
+    "댓글을 지운다 (작성자 본인만, 소프트 삭제)"
+    deleteComment(id: ID!): Boolean!
 }
 
 enum PostType {
@@ -56,6 +62,19 @@ type Post {
     "작성 시각 (KST, ISO-8601)"
     createdAt: String!
     "수정 시각 (KST, ISO-8601). 수정 전에는 createdAt과 같다"
+    updatedAt: String!
+    commentCount: Int!
+    "오래된 순. 대댓글 없음"
+    comments: [Comment!]!
+}
+
+type Comment {
+    id: ID!
+    postId: ID!
+    authorId: ID!
+    author: BoardAuthor!
+    content: String!
+    createdAt: String!
     updatedAt: String!
 }
 

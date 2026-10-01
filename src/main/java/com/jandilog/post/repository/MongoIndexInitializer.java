@@ -13,9 +13,10 @@ import org.springframework.data.mongodb.core.index.IndexDefinition;
 import org.springframework.data.mongodb.core.index.TextIndexDefinition;
 import org.springframework.stereotype.Component;
 
+import com.jandilog.post.domain.Comment;
 import com.jandilog.post.domain.Post;
 
-// 기동할 때 posts 인덱스를 만든다 (DB명세서 3-1). 같은 정의는 다시 만들어도 변화가 없어서 멱등이고,
+// 기동할 때 posts·comments 인덱스를 만든다 (DB명세서 3-1, 3-2). 같은 정의는 다시 만들어도 변화가 없어서 멱등이고,
 // 자동 인덱스 생성 옵션은 쓰지 않는다. Atlas M0에서도 일반·텍스트 인덱스는 쓸 수 있다
 @Component
 public class MongoIndexInitializer implements ApplicationRunner {
@@ -45,6 +46,10 @@ public class MongoIndexInitializer implements ApplicationRunner {
 				// 한국어는 형태소 분석이 없어 언어를 none으로 두고 공백·기호 단위로만 나눈다
 				TextIndexDefinition.builder().named("posts_text").onFields(TEXT_FIELDS).withDefaultLanguage("none")
 						.build()));
+		ensure(Comment.class, List.of(
+				new Index().on("postId", Sort.Direction.ASC).on("createdAt", Sort.Direction.ASC)
+						.named("comments_postId_createdAt"),
+				new Index().on("authorId", Sort.Direction.ASC).named("comments_authorId")));
 	}
 
 	// 인덱스 하나가 실패해도 나머지는 계속 만들고, 앱 기동은 막지 않는다
