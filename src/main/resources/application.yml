@@ -73,8 +73,8 @@ jandilog:
       # HS256 서명 키(43자 이상 무작위, openssl rand -base64 48). 기본값 없음, 환경변수로만 받는다
       secret: ${JWT_SECRET}
       issuer: jandilog
-      # 기획서에 만료 시간 규정 없음. 기본 24시간, 만료되면 재로그인 (E-03)
-      expires-minutes: ${JWT_EXPIRES_MINUTES:1440}
+      # 기획서에 만료 시간 규정 없음. 기본 12시간(사용자 결정), 만료되면 재로그인 (E-03)
+      expires-minutes: ${JWT_EXPIRES_MINUTES:720}
 
 # 헬스체크만 노출하고 Redis는 제외 (Upstash 명령 수 절약, 기능명세서 10장)
 management:
