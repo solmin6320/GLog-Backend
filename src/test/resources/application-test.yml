@@ -1,0 +1,19 @@
+# 테스트 전용 값. 실제 비밀값이 아니다
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: test-github-client-id
+            client-secret: test-github-client-secret
+
+jandilog:
+  # 정기 작업(잔디 갱신·월요일 판정·보류 재시도)은 공유 DB를 건드리므로 테스트에서는 끈다
+  scheduler:
+    enabled: false
+  grass:
+    github-api-token: test-only-github-api-token
+  auth:
+    jwt:
+      secret: test-only-jwt-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz

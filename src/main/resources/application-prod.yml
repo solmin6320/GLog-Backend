@@ -1,0 +1,58 @@
+# 운영 프로필 (SPRING_PROFILES_ACTIVE=prod). application.yml 위에 덮어쓴다.
+# 접속 정보·주소는 기본값을 두지 않는다. 환경변수가 하나라도 빠지면 기동이 실패한다
+spring:
+  datasource:
+    url: jdbc:mariadb://${DB_HOST}:${DB_PORT}/${DB_NAME}?connectionCollation=utf8mb4_general_ci
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: ${REDIS_SSL}
+
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            # https 여부는 ProdProfileValidator가 기동 때 검사한다
+            redirect-uri: ${BACKEND_BASE_URL}/login/oauth2/code/{registrationId}
+
+  # 스키마 노출·개발용 화면은 운영에서 끈다
+  graphql:
+    graphiql:
+      enabled: false
+    schema:
+      introspection:
+        enabled: false
+
+server:
+  servlet:
+    session:
+      cookie:
+        # 환경변수로 낮추지 못하게 고정한다. 바꾸면 ProdProfileValidator가 기동을 막는다
+        secure: true
+
+jandilog:
+  auth:
+    # https 여부는 ProdProfileValidator가 기동 때 검사한다
+    web-base-url: ${WEB_BASE_URL}
+
+# 헬스체크만 노출한다. 상세 정보와 Redis 항목은 제외
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  health:
+    redis:
+      enabled: false
