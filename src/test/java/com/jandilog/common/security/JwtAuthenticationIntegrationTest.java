@@ -81,8 +81,9 @@ class JwtAuthenticationIntegrationTest extends AuthIntegrationTest {
 
 	@Test
 	void 서비스가_발급했어도_시계가_지나_만료되면_401이다() {
-		// 하루 전 시각으로 발급해 24시간 만료가 이미 지난 토큰을 만든다
-		clock.fixAt(Instant.now().minus(Duration.ofHours(30)));
+		// 설정된 만료(기본 12시간)보다 6시간 더 지난 시각으로 발급해 만료가 이미 지난 토큰을 만든다
+		clock.fixAt(Instant.now().minus(Duration.ofMinutes(authProperties.jwt().expiresMinutes()))
+				.minus(Duration.ofHours(6)));
 		String code = authCodeService.issue(memberId);
 		String token = graphQl.post(null,
 				"mutation($c: String!) { exchangeAuthCode(code: $c) { accessToken } }", Map.of("c", code))

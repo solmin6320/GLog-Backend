@@ -9,6 +9,8 @@ spring:
             client-secret: test-github-client-secret
 
 jandilog:
+  grass:
+    github-api-token: test-only-github-api-token
   auth:
     jwt:
       secret: test-only-jwt-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz

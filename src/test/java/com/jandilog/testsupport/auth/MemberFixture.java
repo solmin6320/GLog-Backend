@@ -87,7 +87,13 @@ public class MemberFixture {
 
 	public long insert(MemberStatus status, MemberRole role, String githubLogin, String nickname,
 			LocalDateTime createdAt, LocalDateTime approvedAt) {
-		long githubId = nextGithubId();
+		return insertWithGithubId(nextGithubId(), status, role, githubLogin, nickname, createdAt, approvedAt);
+	}
+
+	// GitHub id를 직접 정해서 넣는다 (ADMIN_GITHUB_IDS 목록 시험용). 끝에 정리하도록 등록한다
+	public long insertWithGithubId(long githubId, MemberStatus status, MemberRole role, String githubLogin,
+			String nickname, LocalDateTime createdAt, LocalDateTime approvedAt) {
+		trackGithubId(githubId);
 		var keys = new GeneratedKeyHolder();
 		jdbc.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(

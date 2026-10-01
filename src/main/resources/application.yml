@@ -73,8 +73,17 @@ jandilog:
       # HS256 서명 키(43자 이상 무작위, openssl rand -base64 48). 기본값 없음, 환경변수로만 받는다
       secret: ${JWT_SECRET}
       issuer: jandilog
-      # 기획서에 만료 시간 규정 없음. 기본 24시간, 만료되면 재로그인 (E-03)
-      expires-minutes: ${JWT_EXPIRES_MINUTES:1440}
+      # 기획서에 만료 시간 규정 없음. 기본 12시간(사용자 결정), 만료되면 재로그인 (E-03)
+      expires-minutes: ${JWT_EXPIRES_MINUTES:720}
+
+  admin:
+    # 첫 관리자로 지정할 GitHub 숫자 id(쉼표 구분). 기본값 비어 있음 = 아무도 승격되지 않는다.
+    # 로그인할 때 목록에 있으면 ACTIVE+ADMIN으로 만든다. 목록에서 빼도 기존 ADMIN은 강등하지 않는다
+    github-ids: ${ADMIN_GITHUB_IDS:}
+
+  grass:
+    # 잔디 조회용 GitHub 서버 토큰. 기본값 없음, 환경변수로만 받고 로그에 남기지 않는다
+    github-api-token: ${GITHUB_API_TOKEN}
 
 # 헬스체크만 노출하고 Redis는 제외 (Upstash 명령 수 절약, 기능명세서 10장)
 management:

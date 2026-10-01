@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(AuthProperties.class)
+@EnableConfigurationProperties({AuthProperties.class, AdminProperties.class})
 public class AppConfig {
 
 	// 앱이 DB에 넣는 시각은 항상 KST (DB명세서 1-0)
