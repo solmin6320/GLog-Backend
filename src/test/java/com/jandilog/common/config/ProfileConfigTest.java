@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,10 +91,30 @@ class ProfileConfigTest {
 	}
 
 	@Test
-	void JWT_만료_기본값은_1440분으로_그대로다() {
-		assertThat(environment(false, Map.of()).getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("1440");
+	void JWT_만료_기본값은_720분_12시간이다() {
+		assertThat(environment(false, Map.of()).getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("720");
 		assertThat(environment(true, allProdVariables()).getProperty("jandilog.auth.jwt.expires-minutes"))
-				.isEqualTo("1440");
+				.isEqualTo("720");
+	}
+
+	@Test
+	void JWT_만료는_환경변수로_바꿀_수_있다() {
+		assertThat(environment(false, Map.of("JWT_EXPIRES_MINUTES", "60"))
+				.getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("60");
+		Map<String, String> prod = new HashMap<>(allProdVariables());
+		prod.put("JWT_EXPIRES_MINUTES", "1440");
+		assertThat(environment(true, prod).getProperty("jandilog.auth.jwt.expires-minutes")).isEqualTo("1440");
+	}
+
+	@Test
+	void 기본_만료로_발급한_토큰은_12시간_뒤에_끝나고_범위_검증은_그대로다() {
+		long minutes = Long.parseLong(environment(false, Map.of()).getProperty("jandilog.auth.jwt.expires-minutes"));
+		AuthProperties.Jwt jwt = new AuthProperties.Jwt(SECRET, "jandilog", minutes);
+
+		assertThat(Duration.ofMinutes(jwt.expiresMinutes())).isEqualTo(Duration.ofHours(12));
+		assertThatThrownBy(() -> new AuthProperties.Jwt(SECRET, "jandilog", 0)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new AuthProperties.Jwt(SECRET, "jandilog", 43_201))
+				.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test
