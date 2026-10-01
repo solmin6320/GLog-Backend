@@ -1,0 +1,131 @@
+name: Deploy
+
+# CI가 main에서 성공하면 이미지를 빌드해 Lightsail에 배포한다 (기능명세서 10장: GitHub Actions → Docker 이미지 → Lightsail)
+# 수동 재배포는 main 브랜치에서 Run workflow
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 배포가 겹치지 않게 순서대로 처리한다
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+# 필요한 GitHub Secrets (값은 저장소 Settings > Secrets and variables > Actions 에서 사람이 넣는다)
+#   LIGHTSAIL_HOST        서버 고정 IP 또는 도메인
+#   LIGHTSAIL_USER        SSH 배포 사용자 (docker 그룹)
+#   LIGHTSAIL_SSH_KEY     위 사용자의 SSH 개인키 (배포 전용 키)
+#   LIGHTSAIL_KNOWN_HOSTS 서버 호스트 키 (ssh-keyscan -t ed25519 <호스트> 출력)
+# 앱 비밀값(DB·JWT·OAuth 등)은 GitHub에 두지 않고 서버의 ~/jandilog/.env 에만 둔다 (deploy/RUNBOOK.md)
+
+env:
+  DEPLOY_DIR: jandilog
+
+jobs:
+  image:
+    # 푸시로 시작한 CI 성공 건만 (포크 PR의 workflow_run 제외) 또는 main에서 수동 실행
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: 배포할 커밋 결정
+        id: meta
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          repo=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${repo}:${RUN_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.sha }}
+
+      - name: GHCR 로그인
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u github-actions --password-stdin
+
+      # 테스트는 CI에서 끝났으므로 Dockerfile의 bootJar 빌드만 한다
+      - name: 이미지 빌드·푸시
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${SHA}" \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.image.outputs.sha }}
+
+      - name: SSH 설정
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          SSH_USER: ${{ secrets.LIGHTSAIL_USER }}
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host lightsail
+            HostName $HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ServerAliveInterval 30
+          EOF
+
+      # compose·nginx·mariadb 설정·배포 스크립트를 서버에 맞춘다 (.env는 건드리지 않는다)
+      - name: 운영 파일 업로드
+        run: |
+          # shellcheck disable=SC2029
+          tar czf - docker-compose.prod.yml deploy \
+            | ssh lightsail "mkdir -p $DEPLOY_DIR && tar xzf - -C $DEPLOY_DIR"
+
+      # GITHUB_TOKEN은 이 실행이 끝나면 만료된다. 서버에는 로그인 정보를 남기지 않는다
+      - name: 이미지 받기·교체 (헬스체크 실패 시 이전 이미지로 복구)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ needs.image.outputs.image }}
+        run: |
+          # shellcheck disable=SC2029
+          echo "$TOKEN" | ssh lightsail "docker login ghcr.io -u github-actions --password-stdin"
+          ssh lightsail "cd $DEPLOY_DIR && bash deploy/deploy.sh '$IMAGE'"
+
+      - name: 서버 레지스트리 로그아웃
+        if: always()
+        run: ssh lightsail "docker logout ghcr.io" || true
