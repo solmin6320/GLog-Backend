@@ -124,6 +124,7 @@ jobs:
         run: |
           # shellcheck disable=SC2029
           echo "$TOKEN" | ssh lightsail "docker login ghcr.io -u github-actions --password-stdin"
+          # shellcheck disable=SC2029
           ssh lightsail "cd $DEPLOY_DIR && bash deploy/deploy.sh '$IMAGE'"
 
       - name: 서버 레지스트리 로그아웃
