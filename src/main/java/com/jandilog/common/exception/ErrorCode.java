@@ -27,6 +27,22 @@ public enum ErrorCode {
 	INVALID_INPUT(ErrorType.BAD_REQUEST, 400, "요청 내용을 확인해 주세요."),
 	// 기획서에 없는 문구(임시): 쿼리 깊이·복잡도 한도 초과
 	QUERY_TOO_COMPLEX(ErrorType.BAD_REQUEST, 400, "요청이 너무 복잡해요. 조건을 줄여서 다시 시도해 주세요."),
+	// E-31, EX-BD03-02, EX-BD04-02: 삭제된 글은 404 화면이 아니라 삭제 안내
+	POST_DELETED(ErrorType.NOT_FOUND, 410, "삭제된 글이에요."),
+	// E-29
+	INVALID_COMMIT_URL(ErrorType.BAD_REQUEST, 400, "GitHub 커밋 주소 형식이 아니에요."),
+	// E-30
+	TAG_LIMIT_EXCEEDED(ErrorType.BAD_REQUEST, 400, "태그는 5개까지 달 수 있어요."),
+	// 기획서에 없는 문구(임시): 태그 한 개가 20자 초과 (E-30은 개수 문구만 있음)
+	TAG_TOO_LONG(ErrorType.BAD_REQUEST, 400, "태그는 20자까지 쓸 수 있어요."),
+	// EX-BD04-01
+	TITLE_REQUIRED(ErrorType.BAD_REQUEST, 400, "제목을 입력해 주세요."),
+	// E-61, EX-BD01-01
+	SEARCH_TOO_SHORT(ErrorType.BAD_REQUEST, 400, "2자 이상 입력해 주세요."),
+	// E-63
+	SEARCH_TOO_LONG(ErrorType.BAD_REQUEST, 400, "검색어는 50자까지 쓸 수 있어요."),
+	// EX-AD01-02: 잔디 인정 규칙 공지는 서버가 삭제를 거부
+	SYSTEM_NOTICE_UNDELETABLE(ErrorType.FORBIDDEN, 403, "이 공지는 판정 기준 안내라 삭제할 수 없어요."),
 	// E-52
 	INTERNAL_ERROR(ErrorType.INTERNAL_ERROR, 500, "잠시 문제가 생겼어요. 조금 뒤에 다시 시도해 주세요.");
 
