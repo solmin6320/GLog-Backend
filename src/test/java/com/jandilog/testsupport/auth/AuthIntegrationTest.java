@@ -1,5 +1,9 @@
 package com.jandilog.testsupport.auth;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +22,7 @@ import com.jandilog.common.config.AuthProperties;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
 		properties = "spring.graphql.schema.locations=classpath:graphql/**/,classpath:auth-probe/**/")
 @ActiveProfiles("test")
-@Import({AuthTestConfig.class, AuthProbeController.class})
+@Import({AuthTestConfig.class, AuthProbeController.class, AuthProbeRestController.class})
 public abstract class AuthIntegrationTest {
 
 	@LocalServerPort
@@ -48,6 +52,14 @@ public abstract class AuthIntegrationTest {
 	protected void tearDownSupport() {
 		clock.reset();
 		members.cleanup();
+	}
+
+	// 서버 키로 서명한 1시간짜리 정상 토큰. 상태·역할은 토큰이 아니라 DB로 정해진다
+	protected String bearerFor(long memberId) {
+		Instant now = Instant.now();
+		return TestTokens.hs256(authProperties.jwt().secret().getBytes(StandardCharsets.UTF_8),
+				TestTokens.claims(Long.toString(memberId), authProperties.jwt().issuer(), now,
+						now.plus(Duration.ofHours(1))));
 	}
 
 }

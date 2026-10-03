@@ -22,7 +22,8 @@ import com.jandilog.testsupport.auth.AuthIntegrationTest;
 import com.jandilog.testsupport.auth.GraphQlHttpClient.GraphQlResponse;
 import com.jandilog.testsupport.auth.TestTokens;
 
-// 계정 상태·역할별 접근 (E-01 승인 대기, E-02 거절, E-03 비로그인, E-09 권한 없음)과 AnonymousAccessGuard.
+// 계정 상태·역할별 접근 (E-01 승인 대기, E-02 거절, E-03 비로그인, E-09 권한 없음)과
+// RootFieldAccessGuard(허용 목록 밖의 루트 필드는 @PreAuthorize가 없어도 ACTIVE 회원만).
 // 운영 스키마에는 ACTIVE 전용 필드가 아직 없어서 테스트 전용 probe 필드(AuthProbeController)를 함께 쓴다
 class AccountAccessIntegrationTest extends AuthIntegrationTest {
 
@@ -77,6 +78,15 @@ class AccountAccessIntegrationTest extends AuthIntegrationTest {
 		assertThat(response.errorMessage()).isEqualTo(expected.message());
 		assertThat(response.errorClassification()).isEqualTo(expected.graphQlType().name());
 		assertThat(response.dataIsNull()).isTrue();
+	}
+
+	// 필드가 nullable이라 data 전체가 null이 되지 않는 경우(__type): 오류는 같고 값만 null이다
+	private void assertDeniedNullable(GraphQlResponse response, ErrorCode expected) {
+		assertThat(response.status()).isEqualTo(200);
+		assertThat(response.errorCode()).isEqualTo(expected.name());
+		assertThat(response.errorMessage()).isEqualTo(expected.message());
+		assertThat(response.data().path("__type").isNull()).isTrue();
+		assertThat(response.rawBody()).doesNotContain("\"name\":\"Query\"");
 	}
 
 	private void assertAllowed(GraphQlResponse response) {
@@ -192,16 +202,70 @@ class AccountAccessIntegrationTest extends AuthIntegrationTest {
 		assertThat(members.countActionLogs(target)).isZero();
 	}
 
-	// ----- 비로그인 우회 시도: AnonymousAccessGuard -----
+	// ----- 기본 거부: RootFieldAccessGuard -----
 
 	@Test
 	void PreAuthorize가_없는_필드도_비로그인은_막는다() {
 		assertDenied(graphQl.post(null, PROBE_OPEN), ErrorCode.UNAUTHENTICATED);
 	}
 
+	@ParameterizedTest
+	@MethodSource("deniedByStatus")
+	void PreAuthorize가_없는_조회는_비로그인_승인대기_거절을_각각_다른_오류로_막는다(Kind kind, ErrorCode expected) {
+		assertDenied(graphQl.post(tokenOf(kind), PROBE_OPEN), expected);
+	}
+
 	@Test
-	void PreAuthorize가_없는_필드는_로그인하면_쓸_수_있다() {
+	void PreAuthorize가_없는_필드는_ACTIVE_회원과_관리자만_쓸_수_있다() {
 		assertAllowed(graphQl.post(tokenOf(Kind.MEMBER), PROBE_OPEN));
+		assertAllowed(graphQl.post(tokenOf(Kind.ADMIN), PROBE_OPEN));
+	}
+
+	@Test
+	void 승인_대기_계정이_me와_다른_필드를_함께_부르면_다른_필드는_거부된다() {
+		String token = tokenOf(Kind.PENDING);
+		assertAllowed(graphQl.post(token, ME));
+
+		assertDenied(graphQl.post(token, "{ me { id } probeOpen }"), ErrorCode.ACCOUNT_PENDING);
+	}
+
+	@Test
+	void 승인_대기와_거절_계정은_루트_메타_필드도_쓸_수_없다() {
+		assertDenied(graphQl.post(tokenOf(Kind.PENDING), "{ __typename }"), ErrorCode.ACCOUNT_PENDING);
+		assertDenied(graphQl.post(tokenOf(Kind.REJECTED), "{ __typename }"), ErrorCode.ACCOUNT_REJECTED);
+		assertDenied(graphQl.post(tokenOf(Kind.PENDING), "{ __schema { queryType { name } } }"),
+				ErrorCode.ACCOUNT_PENDING);
+		assertDeniedNullable(graphQl.post(tokenOf(Kind.REJECTED), "{ __type(name: \"Query\") { name } }"),
+				ErrorCode.ACCOUNT_REJECTED);
+		assertDenied(graphQl.post(tokenOf(Kind.PENDING), "mutation { __typename }"), ErrorCode.ACCOUNT_PENDING);
+	}
+
+	@Test
+	void 비로그인은_루트_메타_필드도_쓸_수_없다() {
+		assertDenied(graphQl.post(null, "{ __typename }"), ErrorCode.UNAUTHENTICATED);
+		assertDeniedNullable(graphQl.post(null, "{ __type(name: \"Query\") { name } }"), ErrorCode.UNAUTHENTICATED);
+		assertDenied(graphQl.post(null, "mutation { __typename }"), ErrorCode.UNAUTHENTICATED);
+	}
+
+	@Test
+	void ACTIVE_회원은_루트_메타_필드를_쓸_수_있다() {
+		GraphQlResponse typename = graphQl.post(tokenOf(Kind.MEMBER), "{ __typename }");
+		GraphQlResponse schema = graphQl.post(tokenOf(Kind.ADMIN), "{ __schema { queryType { name } } }");
+
+		assertAllowed(typename);
+		assertThat(typename.data().path("__typename").asText()).isEqualTo("Query");
+		assertAllowed(schema);
+		assertThat(schema.data().path("__schema").path("queryType").path("name").asText()).isEqualTo("Query");
+	}
+
+	@Test
+	void 허용_목록은_루트_타입까지_맞춰서_Mutation의_me는_로그인만으로_열리지_않는다() {
+		// 테스트 스키마의 Mutation.me는 Query.me와 이름만 같다
+		assertAllowed(graphQl.post(tokenOf(Kind.PENDING), ME));
+		assertDenied(graphQl.post(tokenOf(Kind.PENDING), "mutation { me }"), ErrorCode.ACCOUNT_PENDING);
+		assertDenied(graphQl.post(tokenOf(Kind.REJECTED), "mutation { me }"), ErrorCode.ACCOUNT_REJECTED);
+		assertDenied(graphQl.post(null, "mutation { me }"), ErrorCode.UNAUTHENTICATED);
+		assertAllowed(graphQl.post(tokenOf(Kind.MEMBER), "mutation { me }"));
 	}
 
 	@Test

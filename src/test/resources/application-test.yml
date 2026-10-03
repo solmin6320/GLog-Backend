@@ -11,4 +11,4 @@ spring:
 jandilog:
   auth:
     jwt:
-      secret: test-only-jwt-secret-key-0123456789-abcdef
+      secret: test-only-jwt-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz

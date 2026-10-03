@@ -25,6 +25,8 @@ public enum ErrorCode {
 	CONFLICT(ErrorType.BAD_REQUEST, 409, "이미 처리된 회원이에요. 목록을 새로고침해 주세요."),
 	// 기획서에 없는 문구(임시): 잘못된 입력
 	INVALID_INPUT(ErrorType.BAD_REQUEST, 400, "요청 내용을 확인해 주세요."),
+	// 기획서에 없는 문구(임시): 쿼리 깊이·복잡도 한도 초과
+	QUERY_TOO_COMPLEX(ErrorType.BAD_REQUEST, 400, "요청이 너무 복잡해요. 조건을 줄여서 다시 시도해 주세요."),
 	// E-52
 	INTERNAL_ERROR(ErrorType.INTERNAL_ERROR, 500, "잠시 문제가 생겼어요. 조금 뒤에 다시 시도해 주세요.");
 

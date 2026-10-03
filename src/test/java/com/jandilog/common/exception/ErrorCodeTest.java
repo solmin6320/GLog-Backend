@@ -74,6 +74,8 @@ class ErrorCodeTest {
 		assertThat(ErrorCode.CONFLICT.graphQlType()).isEqualTo(ErrorType.BAD_REQUEST);
 		assertThat(ErrorCode.INVALID_INPUT.httpStatus()).isEqualTo(400);
 		assertThat(ErrorCode.INVALID_INPUT.graphQlType()).isEqualTo(ErrorType.BAD_REQUEST);
+		assertCode(ErrorCode.QUERY_TOO_COMPLEX, 400, ErrorType.BAD_REQUEST,
+				"요청이 너무 복잡해요. 조건을 줄여서 다시 시도해 주세요.");
 	}
 
 	@Test

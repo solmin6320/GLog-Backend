@@ -67,7 +67,16 @@ public class Member {
 		return member;
 	}
 
-	// 로그인마다 GitHub 최신값으로 덮어쓴다 (DB명세서 1-1)
+	// ADMIN_GITHUB_IDS에 있는 첫 로그인: 승인 절차 없이 활성 관리자로 만든다
+public static Member createAdmin(long githubId, String githubLogin, String nickname, LocalDateTime now) {
+	Member member = createPending(githubId, githubLogin, nickname, now);
+	member.status = MemberStatus.ACTIVE;
+	member.role = MemberRole.ADMIN;
+	member.approvedAt = now;
+	return member;
+}
+
+// 로그인마다 GitHub 최신값으로 덮어쓴다 (DB명세서 1-1)
 	public void syncGithubProfile(String githubLogin, String nickname) {
 		this.githubLogin = githubLogin;
 		this.nickname = nickname;

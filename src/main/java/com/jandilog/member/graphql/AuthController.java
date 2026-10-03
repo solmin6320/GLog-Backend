@@ -21,14 +21,14 @@ public class AuthController {
 		this.authService = authService;
 	}
 
-	// 로그인 전 호출이라 비로그인 허용 (AnonymousAccessGuard의 허용 목록과 함께 관리)
+	// 로그인 전 호출이라 비로그인 허용 (RootFieldAccessGuard의 허용 목록과 함께 관리)
 	@MutationMapping
 	@PreAuthorize("permitAll()")
 	public AuthPayload exchangeAuthCode(@Argument String code) {
 		return authService.exchange(code);
 	}
 
-	// 승인 대기·거절 계정도 볼 수 있는 유일한 조회 (AU-03, E-01, E-02)
+	// 승인 대기·거절 계정도 볼 수 있는 유일한 조회 (AU-03, E-01, E-02). RootFieldAccessGuard의 로그인 전용 목록과 함께 관리
 	@QueryMapping
 	@PreAuthorize("isAuthenticated()")
 	public MeResponse me(@AuthenticationPrincipal AuthenticatedMember member) {

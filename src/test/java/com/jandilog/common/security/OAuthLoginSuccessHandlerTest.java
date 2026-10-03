@@ -50,7 +50,7 @@ class OAuthLoginSuccessHandlerTest {
 	@BeforeEach
 	void setUp() {
 		LoginRedirector redirector = new LoginRedirector(new AuthProperties("https://jandi.example.com",
-				"jandilog://auth", new AuthProperties.Jwt("unit-test-secret-key-0123456789-abcdef", "jandilog", 60)));
+				"jandilog://auth", new AuthProperties.Jwt("unit-test-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz", "jandilog", 60)));
 		handler = new OAuthLoginSuccessHandler(memberService, authCodeService, redirector);
 	}
 

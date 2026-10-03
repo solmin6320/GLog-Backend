@@ -19,7 +19,7 @@ class OAuthLoginFailureHandlerTest {
 
 	private final OAuthLoginFailureHandler handler = new OAuthLoginFailureHandler(new LoginRedirector(
 			new AuthProperties("https://jandi.example.com", "jandilog://auth",
-					new AuthProperties.Jwt("unit-test-secret-key-0123456789-abcdef", "jandilog", 60))));
+					new AuthProperties.Jwt("unit-test-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz", "jandilog", 60))));
 
 	private MockHttpServletRequest request(LoginClient client) {
 		MockHttpServletRequest request = new MockHttpServletRequest();
