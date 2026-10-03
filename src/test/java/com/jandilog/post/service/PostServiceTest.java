@@ -44,6 +44,7 @@ import com.jandilog.post.dto.TagCount;
 import com.jandilog.post.dto.UpdatePostInput;
 import com.jandilog.post.repository.PostRepository;
 import com.jandilog.post.repository.PostSearchCondition;
+import com.jandilog.team.service.TeamAccessService;
 import com.jandilog.testsupport.auth.MutableClock;
 
 // 글 작성·수정·삭제·목록 규칙. 쓰기 순서(Mongo 먼저, post_index 나중)와 실패 보상은 mock으로 확인한다 (DB명세서 4-1)
@@ -61,6 +62,8 @@ class PostServiceTest {
 	private PostRepository postRepository;
 	@Mock
 	private PostIndexService postIndexService;
+	@Mock
+	private TeamAccessService teamAccess;
 
 	private MutableClock clock;
 	private PostService service;
@@ -69,7 +72,7 @@ class PostServiceTest {
 	void setUp() {
 		clock = new MutableClock();
 		clock.fixAt(Instant.parse("2026-10-01T03:00:00Z"));
-		service = new PostService(postRepository, postIndexService, clock);
+		service = new PostService(postRepository, postIndexService, teamAccess, clock);
 	}
 
 	private static CreatePostInput completeTroubleshooting() {
@@ -208,6 +211,25 @@ class PostServiceTest {
 	}
 
 	@Test
+	void 팀을_연결해_쓰면_소속을_확인한_뒤에_Mongo에_저장한다() {
+		service.create(AUTHOR, completeTroubleshooting());
+
+		InOrder order = inOrder(teamAccess, postRepository, postIndexService);
+		order.verify(teamAccess).requireLinkable(3L, AUTHOR);
+		order.verify(postRepository).insert(any());
+		order.verify(postIndexService).register(any());
+	}
+
+	@Test
+	void 연결할_수_없는_팀이면_Mongo도_post_index도_건드리지_않는다() {
+		doThrow(new ApiException(ErrorCode.POST_TEAM_INVALID)).when(teamAccess).requireLinkable(3L, AUTHOR);
+
+		assertCode(() -> service.create(AUTHOR, completeTroubleshooting()), ErrorCode.POST_TEAM_INVALID);
+
+		verifyNoInteractions(postRepository, postIndexService);
+	}
+
+	@Test
 	void post_index_쓰기가_실패하면_방금_쓴_Mongo_글을_지우고_예외를_그대로_올린다() {
 		IllegalStateException failure = new IllegalStateException("색인 실패");
 		doThrow(failure).when(postIndexService).register(any());
@@ -283,6 +305,49 @@ class PostServiceTest {
 		assertThat(response.tags()).isEmpty();
 		assertThat(response.commitUrls()).isEmpty();
 		assertThat(response.teamId()).isNull();
+	}
+
+	private static UpdatePostInput updateInputWithTeam(String teamId) {
+		return new UpdatePostInput("새 제목", new PostSectionsInput("문제", "원인", "해결", null, null), List.of(), List.of(), teamId);
+	}
+
+	@Test
+	void 다른_팀으로_바꾸는_수정은_새_팀의_소속을_확인한_뒤에_저장한다() {
+		Post current = alivePost();
+		when(postRepository.findById(current.getId())).thenReturn(Optional.of(current));
+		when(postRepository.replaceIfAlive(any())).thenReturn(Optional.of(current));
+
+		PostResponse response = service.update(AUTHOR, current.getId().toHexString(), updateInputWithTeam("5"));
+
+		InOrder order = inOrder(teamAccess, postRepository);
+		order.verify(teamAccess).requireLinkable(5L, AUTHOR);
+		order.verify(postRepository).replaceIfAlive(any());
+		assertThat(response.teamId()).isEqualTo(5L);
+	}
+
+	@Test
+	void 연결할_수_없는_팀으로_바꾸는_수정은_Mongo도_post_index도_바꾸지_않는다() {
+		Post current = alivePost();
+		when(postRepository.findById(current.getId())).thenReturn(Optional.of(current));
+		doThrow(new ApiException(ErrorCode.POST_TEAM_INVALID)).when(teamAccess).requireLinkable(5L, AUTHOR);
+
+		assertCode(() -> service.update(AUTHOR, current.getId().toHexString(), updateInputWithTeam("5")),
+				ErrorCode.POST_TEAM_INVALID);
+
+		verify(postRepository, never()).replaceIfAlive(any());
+		verifyNoInteractions(postIndexService);
+	}
+
+	@Test
+	void 팀을_비우는_수정은_소속을_확인하지_않는다() {
+		Post current = alivePost();
+		when(postRepository.findById(current.getId())).thenReturn(Optional.of(current));
+		when(postRepository.replaceIfAlive(any())).thenReturn(Optional.of(current));
+
+		PostResponse response = service.update(AUTHOR, current.getId().toHexString(), updateInput());
+
+		assertThat(response.teamId()).isNull();
+		verifyNoInteractions(teamAccess);
 	}
 
 	@Test
