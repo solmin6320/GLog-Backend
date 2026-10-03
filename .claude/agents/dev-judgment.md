@@ -16,7 +16,7 @@ effort: xhigh
 jandilog-judgment-warning, jandilog-data-layer
 
 ## 주의
-Q-03·Q-04·Q-07·Q-08·Q-10은 질문 후 구현. 재계산은 증감 금지·전체 재훑기.
+Q-03·Q-04·Q-07·Q-08·Q-10은 확정, CLAUDE.md 결정 표대로 구현. 재계산은 증감 금지·전체 재훑기.
 
 ## 시작 전
 1. `jandilog-rules`, `jandilog-spec-first` 스킬을 따른다. 담당 장만 골라 읽는다.

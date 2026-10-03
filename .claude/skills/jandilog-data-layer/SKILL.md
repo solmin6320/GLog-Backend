@@ -10,7 +10,7 @@ description: 잔디로그 DB 3종(MariaDB·MongoDB·Redis) 경계, Flyway, 엔�
 |---|---|---|
 | MariaDB | 회원·팀·판정·경고·벌칙·면제·공지·`post_index` | 틀리면 불이익 → 트랜잭션·제약 |
 | MongoDB | `posts`, `comments` | 글 종류별 항목이 다름 |
-| Redis | 잔디 캐시·추방 차단·일회용 코드·(락) | TTL이 규칙 |
+| Redis | 잔디 캐시·추방 차단·일회용 코드 | TTL이 규칙 |
 
 ## MariaDB
 - `utf8mb4`, ID `BIGINT AUTO_INCREMENT`, 시간 `DATETIME`(앱이 KST 값 입력), 주차 = 월요일 `DATE`.
@@ -30,9 +30,9 @@ description: 잔디로그 DB 3종(MariaDB·MongoDB·Redis) 경계, Flyway, 엔�
 - 프로필 글·댓글 수는 Mongo `countDocuments`(`post_index`로 세지 않는다, 4-5).
 
 ## Redis 키
-`grass:{memberId}:{yyyy-MM-dd}` 26h · `ban:{teamId}:{memberId}` 1년 · `authcode:{code}` 60s · `lock:warn:{memberId}` 30s(위치 Q-08 미결).
+`grass:{memberId}:{yyyy-MM-dd}` 26h · `ban:{teamId}:{memberId}` 1년 · `authcode:{code}` 60s. 재계산 락은 Redis 키 없이 MariaDB 회원 행 비관적 락(Q-08).
 - 일회용 코드는 사용 즉시 삭제. 추방 차단은 초대코드 참가에만 적용(아이디 초대 허용).
 - Actuator 헬스체크에서 Redis 제외.
 
-## 미결
-Q-01 초대코드 평문/해시(`team.invite_code` 타입) · Q-06 페이지네이션 · Q-08 락 위치.
+## 확정 (CLAUDE.md 결정 표)
+Q-01 초대코드 평문 저장 · Q-06 커서 기반 20개 `{items, nextCursor}` · Q-08 MariaDB 회원 행 비관적 락.
