@@ -140,6 +140,21 @@ class PostTeamLinkIntegrationTest extends BoardIntegrationTest {
 		assertLinkedTo(id, null);
 	}
 
+	// 이미 연결된 팀은 다시 보지 않는다 (CLAUDE.md 결정 표 "글 팀 연결")
+	@Test
+	void 팀을_나간_뒤에도_그_팀이_연결된_내_글은_연결을_유지한_채_고칠_수_있다() {
+		long team = teams.create(other);
+		teams.join(team, author);
+		String id = newPost(author, linked(recordPost("나가기 전 글"), team));
+		teams.leave(team, author);
+
+		JsonNode updated = ok(update(author, id, linked(updateInput("나간 뒤 고친 글"), team))).data().path("updatePost");
+
+		assertThat(updated.path("title").asText()).isEqualTo("나간 뒤 고친 글");
+		assertThat(updated.path("teamId").asText()).isEqualTo(Long.toString(team));
+		assertLinkedTo(id, team);
+	}
+
 	@Test
 	void 수정에서_속하지_않은_팀으로_바꾸면_거부되고_기존_연결이_유지된다() {
 		long mine = teams.create(author);

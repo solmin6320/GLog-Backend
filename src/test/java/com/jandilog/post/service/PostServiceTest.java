@@ -338,6 +338,19 @@ class PostServiceTest {
 		verifyNoInteractions(postIndexService);
 	}
 
+	// 팀을 나간 뒤에도 글을 고칠 수 있게 이미 연결된 팀은 다시 보지 않는다 (CLAUDE.md 결정 표 "글 팀 연결")
+	@Test
+	void 이미_연결된_팀을_그대로_두는_수정은_소속을_다시_확인하지_않는다() {
+		Post current = alivePost();
+		when(postRepository.findById(current.getId())).thenReturn(Optional.of(current));
+		when(postRepository.replaceIfAlive(any())).thenReturn(Optional.of(current));
+
+		PostResponse response = service.update(AUTHOR, current.getId().toHexString(), updateInputWithTeam("3"));
+
+		assertThat(response.teamId()).isEqualTo(3L);
+		verifyNoInteractions(teamAccess);
+	}
+
 	@Test
 	void 팀을_비우는_수정은_소속을_확인하지_않는다() {
 		Post current = alivePost();
