@@ -45,7 +45,7 @@ import com.jandilog.warning.service.WarningRecalculationService;
 @Service
 public class TeamBoardService {
 
-	// 화면설계서 TM-05 ⑦: 이 팀의 기록글 최신 5건 (제안)
+	// 화면설계서 TM-05 ⑦: 이 팀에 연결된 글 최신 5건 (제안)
 	static final int RECENT_POST_LIMIT = 5;
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
@@ -170,7 +170,7 @@ public class TeamBoardService {
 	}
 
 	private List<TeamBoardPostResponse> recentPosts(long teamId) {
-		List<Post> posts = postRepository.findLatestRecords(teamId, RECENT_POST_LIMIT);
+		List<Post> posts = postRepository.findLatestLinked(teamId, RECENT_POST_LIMIT);
 		Map<Long, BoardAuthor> authors = authorService
 				.findByIds(posts.stream().map(Post::getAuthorId).distinct().toList());
 		List<TeamBoardPostResponse> result = new ArrayList<>();
@@ -178,7 +178,7 @@ public class TeamBoardService {
 			BoardAuthor author = authors.get(post.getAuthorId());
 			if (author != null) {
 				result.add(new TeamBoardPostResponse(post.getId().toHexString(), post.getType(), post.getTitle(), author,
-						kst(post.getCreatedAt())));
+						kst(post.getCreatedAt()), post.isRecord()));
 			}
 		}
 		return result;

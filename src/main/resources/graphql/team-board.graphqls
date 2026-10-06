@@ -38,7 +38,7 @@ type TeamBoard {
     grassNotLoaded: Boolean!
     "팀장이 맨 앞, 나머지는 참가한 순서"
     members: [TeamBoardMember!]!
-    "이 팀에 연결된 기록글 최신 5건"
+    "이 팀에 연결된 글 최신 5건. 필수 항목이 빈 글도 포함한다(isRecord로 구분)"
     recentPosts: [TeamBoardPost!]!
 }
 
@@ -68,7 +68,7 @@ type TeamBoardDay {
     verified: Boolean
 }
 
-"이 팀의 기록글 한 줄 (말머리·제목·작성자·날짜)"
+"이 팀에 연결된 글 한 줄 (말머리·제목·작성자·날짜)"
 type TeamBoardPost {
     id: ID!
     type: PostType!
@@ -76,6 +76,8 @@ type TeamBoardPost {
     author: BoardAuthor!
     "작성 시각 (KST, ISO-8601)"
     createdAt: String!
+    "필수 항목을 모두 채운 기록글인가. false면 인증 미포함 글"
+    isRecord: Boolean!
 }
 
 "이번 주 요약. 판정 제외·면제인 팀원은 어느 쪽에도 세지 않는다"
