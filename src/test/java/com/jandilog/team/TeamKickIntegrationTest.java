@@ -10,6 +10,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.team.dto.TeamMemberResponse;
@@ -26,6 +29,9 @@ class TeamKickIntegrationTest extends TeamIntegrationTest {
 	private static final LocalDate WEEK_1 = LocalDate.of(2026, 9, 7);
 	private static final LocalDate WEEK_2 = LocalDate.of(2026, 9, 14);
 	private static final LocalDate WEEK_3 = LocalDate.of(2026, 9, 21);
+
+	@Autowired
+	private PlatformTransactionManager txManager;
 
 	// ----- 소속·차단 키 -----
 
@@ -66,6 +72,26 @@ class TeamKickIntegrationTest extends TeamIntegrationTest {
 		assertThat(ttlSeconds).isNotNull();
 		assertThat(ttlSeconds).isLessThanOrEqualTo(Duration.ofDays(365).toSeconds());
 		assertThat(ttlSeconds).isGreaterThan(Duration.ofDays(365).minusMinutes(10).toSeconds());
+	}
+
+	@Test
+	void 추방이_들어_있던_트랜잭션이_롤백되면_차단_키도_지워져_추방하지_않은_사람이_막히지_않는다() {
+		long leader = member();
+		CreatedTeam team = newTeam(leader);
+		long target = joinedMember(team);
+		long warningId = warnings.warning(target, WEEK_1, team.id());
+
+		new TransactionTemplate(txManager).executeWithoutResult(status -> {
+			leaveService.kick(leader, team.id(), target);
+			// 키는 DB 변경과 같은 트랜잭션 안에서 먼저 쓰인다
+			assertThat(redis.hasKey(banKey(team.id(), target))).isTrue();
+			status.setRollbackOnly();
+		});
+
+		assertThat(redis.hasKey(banKey(team.id(), target))).isFalse();
+		assertThat(isActiveMember(team.id(), target)).isTrue();
+		assertThat(membershipRows(team.id(), target)).hasSize(1);
+		assertThat(warnings.warning(warningId).alive()).isTrue();
 	}
 
 	@Test
