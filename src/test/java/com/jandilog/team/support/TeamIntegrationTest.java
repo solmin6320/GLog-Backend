@@ -25,6 +25,10 @@ import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.member.domain.MemberRole;
 import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.post.domain.Post;
+import com.jandilog.post.domain.PostType;
+import com.jandilog.post.dto.CreatePostInput;
+import com.jandilog.post.dto.PostSectionsInput;
+import com.jandilog.post.service.PostService;
 import com.jandilog.team.dto.CreateTeamInput;
 import com.jandilog.team.dto.CreateTeamPayload;
 import com.jandilog.team.dto.SentInvitationResponse;
@@ -62,6 +66,8 @@ public abstract class TeamIntegrationTest extends AuthIntegrationTest {
 	protected TeamMembershipService membershipService;
 	@Autowired
 	protected MongoTemplate mongo;
+	@Autowired
+	protected PostService postService;
 
 	protected TeamWarningFixture warnings;
 
@@ -182,6 +188,13 @@ public abstract class TeamIntegrationTest extends AuthIntegrationTest {
 	protected void inviteAndAccept(long leaderId, CreatedTeam team, long inviteeId) {
 		SentInvitationResponse invitation = invitationService.invite(leaderId, team.id(), loginOf(inviteeId));
 		invitationService.accept(inviteeId, invitation.id());
+	}
+
+	// 기록글로 인정되는 개발일지를 쓴다. team이 null이면 팀 연결 없음. 글 id를 돌려준다
+	protected String newPost(long authorId, CreatedTeam team) {
+		String teamId = team == null ? null : Long.toString(team.id());
+		return postService.create(authorId, new CreatePostInput(PostType.DEVLOG, "글-" + sequence.incrementAndGet(),
+				new PostSectionsInput(null, null, null, "한 일", "배운 점"), List.of(), List.of(), teamId)).id();
 	}
 
 	// ----- 오류 단언 -----
