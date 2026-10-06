@@ -78,19 +78,29 @@ public class PostService {
 		return PostResponse.from(post);
 	}
 
-	// 수정해도 작성일·종류는 그대로이고, 기록글 여부는 새 본문 기준으로 다시 계산한다 (Q-11)
+	// 수정해도 작성일·종류는 그대로이고, 기록글 여부는 새 본문 기준으로 다시 계산한다 (Q-11).
+	// 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장이 고칠 수 있다 (기능명세서 2장, BD-04)
 	public PostResponse update(long memberId, String postId, UpdatePostInput input) {
 		Post current = loadAlive(postId);
-		requireAuthor(current, memberId);
+		boolean author = current.getAuthorId() == memberId;
+		if (!author && !teamAccess.isLeaderOfAliveTeam(current.getTeamId(), memberId)) {
+			throw new ApiException(ErrorCode.FORBIDDEN);
+		}
 
 		String title = PostInputRules.title(input.title());
 		PostSections sections = PostInputRules.sections(current.getType(), input.sections());
 		List<String> tags = PostInputRules.tags(input.tags());
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
-		Long teamId = PostInputRules.teamId(input.teamId());
-		// 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않는다(팀에서 나간 뒤에도 내용은 고칠 수 있게). 새로 연결하거나 바꿀 때만 소속을 본다
-		if (teamId != null && !teamId.equals(current.getTeamId())) {
-			teamAccess.requireLinkable(teamId, memberId);
+		Long teamId;
+		if (author) {
+			teamId = PostInputRules.teamId(input.teamId());
+			// 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않는다(팀에서 나간 뒤에도 내용은 고칠 수 있게). 새로 연결하거나 바꿀 때만 소속을 본다
+			if (teamId != null && !teamId.equals(current.getTeamId())) {
+				teamAccess.requireLinkable(teamId, memberId);
+			}
+		} else {
+			// 팀장은 남의 글의 팀 연결을 바꾸지 못한다 (BD-04 ⑨ 비활성). 입력의 teamId는 읽지 않고 기존 연결을 유지한다
+			teamId = current.getTeamId();
 		}
 
 		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, clock.instant());
@@ -170,7 +180,14 @@ public class PostService {
 		return new ObjectId(id);
 	}
 
-	// 글 수정·삭제는 작성자 본인만. 팀장·관리자 권한은 팀 모듈·관리자 모듈에서 따로 붙인다
+	// 글이 연결된 팀의 현재 팀장인가. 댓글 수정 권한 판단에 쓴다.
+	// 삭제된 글도 연결이 남아 있으면 true로 두어, 팀장에게는 이후 단계가 POST_DELETED로 알린다 (EX-BD03-02)
+	public boolean isLinkedTeamLeader(ObjectId postId, long memberId) {
+		return postRepository.findById(postId)
+				.map(post -> teamAccess.isLeaderOfAliveTeam(post.getTeamId(), memberId)).orElse(false);
+	}
+
+	// 글 삭제는 작성자 본인만(팀장은 수정만 가능, 관리자 삭제는 관리자 모듈에서 따로 붙인다)
 	private static void requireAuthor(Post post, long memberId) {
 		if (post.getAuthorId() != memberId) {
 			throw new ApiException(ErrorCode.FORBIDDEN);

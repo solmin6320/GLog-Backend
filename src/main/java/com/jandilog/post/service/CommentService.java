@@ -19,7 +19,7 @@ import com.jandilog.post.domain.Post;
 import com.jandilog.post.dto.CommentResponse;
 import com.jandilog.post.repository.CommentRepository;
 
-// 댓글 작성·수정·삭제와 글 상세의 댓글 목록 (기능명세서 3장). 1단계 댓글이고, 수정·삭제는 작성자 본인만
+// 댓글 작성·수정·삭제와 글 상세의 댓글 목록 (기능명세서 3장). 1단계 댓글이고, 삭제는 작성자 본인만, 수정은 팀장도 가능
 @Service
 public class CommentService {
 
@@ -43,9 +43,12 @@ public class CommentService {
 		return CommentResponse.from(comment);
 	}
 
+	// 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장이 고칠 수 있다 (기능명세서 2장, BD-03 ⑪)
 	public CommentResponse update(long memberId, String commentId, String content) {
 		Comment comment = loadAlive(commentId);
-		requireAuthor(comment, memberId);
+		if (comment.getAuthorId() != memberId && !postService.isLinkedTeamLeader(comment.getPostId(), memberId)) {
+			throw new ApiException(ErrorCode.FORBIDDEN);
+		}
 		postService.loadAlive(comment.getPostId().toHexString());
 		String text = PostInputRules.commentContent(content);
 

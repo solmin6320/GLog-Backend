@@ -59,6 +59,13 @@ public class TeamAccessService {
 		}
 	}
 
+	// 글·댓글 수정용 팀장 권한: 연결된 팀이 삭제되지 않았고 내가 지금 그 팀의 팀장일 때만 true (기능명세서 2장, BD-03·BD-04).
+	// 연결이 없거나 팀이 삭제됐으면 권한도 없고, 위임으로 팀장이 바뀌면 읽는 시점의 새 팀장에게 옮겨간다
+	public boolean isLeaderOfAliveTeam(Long teamId, long memberId) {
+		return teamId != null && teamRepository.findById(teamId).filter(team -> !team.isDeleted())
+				.map(team -> team.isLeader(memberId)).orElse(false);
+	}
+
 	// 글에 연결하는 팀: 지금 내가 소속인 삭제되지 않은 팀만 (기능명세서 2장·3장, E-23과 같은 쪽의 입력 검증)
 	public void requireLinkable(Long teamId, long memberId) {
 		if (teamId == null) {
