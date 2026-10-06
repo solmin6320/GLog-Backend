@@ -54,7 +54,7 @@ class TeamBoardIntegrationTest extends AuthIntegrationTest {
 			      memberId nickname githubLogin isMe verifiedDays recordCount warningCount status
 			      days { date hasGrass hasRecord verified }
 			    }
-			    recentPosts { id type title createdAt author { id nickname } }
+			    recentPosts { id type title createdAt isRecord author { id nickname } }
 			  }
 			}
 			""";
@@ -198,14 +198,18 @@ class TeamBoardIntegrationTest extends AuthIntegrationTest {
 		// 이번 주에 처음 참가한 팀원은 판정 제외
 		assertThat(rows.get(3).path("status").asText()).isEqualTo("EXCLUDED");
 
-		// 이 팀에 연결된 기록글만 최신순 (미완성 글·다른 팀 글 제외)
+		// 이 팀에 연결된 글 전체를 최신순으로: 필수 항목이 빈 글도 포함하고 isRecord로 구분한다. 다른 팀 글은 나오지 않는다
 		JsonNode posts = board.path("recentPosts");
-		assertThat(posts).hasSize(2);
-		assertThat(posts.get(0).path("title").asText()).isEqualTo("passer 기록글");
-		assertThat(posts.get(0).path("type").asText()).isEqualTo("TROUBLESHOOTING");
-		assertThat(posts.get(0).path("author").path("id").asLong()).isEqualTo(passer);
-		assertThat(posts.get(0).path("createdAt").asText()).startsWith("2026-10-08T12:01");
-		assertThat(posts.get(1).path("title").asText()).isEqualTo("leader 기록글");
+		assertThat(posts).hasSize(3);
+		assertThat(posts.get(0).path("title").asText()).isEqualTo("passer 미완성");
+		assertThat(posts.get(0).path("isRecord").asBoolean()).isFalse();
+		assertThat(posts.get(1).path("title").asText()).isEqualTo("passer 기록글");
+		assertThat(posts.get(1).path("isRecord").asBoolean()).isTrue();
+		assertThat(posts.get(1).path("type").asText()).isEqualTo("TROUBLESHOOTING");
+		assertThat(posts.get(1).path("author").path("id").asLong()).isEqualTo(passer);
+		assertThat(posts.get(1).path("createdAt").asText()).startsWith("2026-10-08T12:01");
+		assertThat(posts.get(2).path("title").asText()).isEqualTo("leader 기록글");
+		assertThat(posts.get(2).path("isRecord").asBoolean()).isTrue();
 
 		verifyNoInteractions(grassClient);
 	}
