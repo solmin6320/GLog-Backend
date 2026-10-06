@@ -21,6 +21,12 @@ public sealed interface WarningRecalcResult {
 			beforeBaselineWarningWeeks = List.copyOf(beforeBaselineWarningWeeks);
 		}
 
+		// 경고가 3개에 도달한 주(세 번째 살아 있는 경고의 주차). 벌칙 대상일 때만 있다.
+		// 3개에 닿은 뒤에는 차감이 멈춰 앞의 세 개가 바뀌지 않으므로 목록의 세 번째가 곧 도달 주차다 (penalty_fulfillment.reached_week)
+		public LocalDate penaltyReachedWeek() {
+			return penaltyTarget ? activeWarningWeeks.get(WarningRecalculator.PENALTY_THRESHOLD - 1) : null;
+		}
+
 	}
 
 	// 판정 보류가 풀릴 때까지 재계산하지 않는다. holdWeeks: 보류 중인 주차

@@ -9,6 +9,9 @@ spring:
             client-secret: test-github-client-secret
 
 jandilog:
+  # 정기 작업(잔디 갱신·월요일 판정·보류 재시도)은 공유 DB를 건드리므로 테스트에서는 끈다
+  scheduler:
+    enabled: false
   grass:
     github-api-token: test-only-github-api-token
   auth:
