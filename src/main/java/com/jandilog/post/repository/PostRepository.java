@@ -73,6 +73,22 @@ public class PostRepository {
 		return mongo.find(query, Post.class);
 	}
 
+	// 팀 글 관리용: 그 팀에 연결된 삭제되지 않은 글, 최신순. after보다 오래된 글부터 limit개 (TM-06 ⑧)
+	public List<Post> findPageByTeam(long teamId, ObjectId after, int limit) {
+		Criteria criteria = Criteria.where("teamId").is(teamId).and("deletedAt").isNull();
+		if (after != null) {
+			criteria = criteria.and("_id").lt(after);
+		}
+		return mongo.find(Query.query(criteria).with(Sort.by(Sort.Direction.DESC, "_id")).limit(limit), Post.class);
+	}
+
+	// 팀 댓글 관리용: 그 팀에 연결된 삭제되지 않은 글의 _id 목록 (DB명세서 4-6 1단계)
+	public List<ObjectId> findAliveIdsByTeam(long teamId) {
+		Query query = Query.query(Criteria.where("teamId").is(teamId).and("deletedAt").isNull());
+		query.fields().include("_id");
+		return mongo.find(query, Post.class).stream().map(Post::getId).toList();
+	}
+
 	public long count(PostSearchCondition condition) {
 		return mongo.count(new BasicQuery(filter(condition)), Post.class);
 	}
