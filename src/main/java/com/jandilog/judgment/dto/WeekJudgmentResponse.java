@@ -18,8 +18,10 @@ public record WeekJudgmentResponse(
 		String judgedAt) {
 
 	public static WeekJudgmentResponse from(WeeklyJudgment judgment) {
+		boolean counts = judgment.getStatus().showsCounts();
 		return new WeekJudgmentResponse(judgment.getStatus(), judgment.getSkipReason(), judgment.getHoldReason(),
-				judgment.getVerifiedDays(), judgment.getRecordCount(), judgment.isCorrected(),
+				counts ? judgment.getVerifiedDays() : null, counts ? judgment.getRecordCount() : null,
+				judgment.isCorrected(),
 				judgment.getJudgedAt() == null ? null : DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(judgment.getJudgedAt()));
 	}
 
