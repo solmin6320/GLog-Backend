@@ -16,7 +16,7 @@ effort: xhigh
 jandilog-judgment-warning, jandilog-graphql-api, jandilog-data-layer
 
 ## 주의
-관리자 기능은 웹 전용, 7가지를 늘리거나 줄이지 않는다. Q-05는 확정(정정 결과는 통과·미달·면제 셋만). Q-13은 질문 후 구현.
+관리자 기능은 웹 전용, 7가지를 늘리거나 줄이지 않는다. Q-05는 확정(정정 결과는 통과·미달·면제 셋만). Q-13은 확정(벌칙 이행 이전 경고는 이력에 "이행 완료"로 표시, 현재 경고 수에는 넣지 않음).
 
 ## 시작 전
 1. `jandilog-rules`, `jandilog-spec-first` 스킬을 따른다. 담당 장만 골라 읽는다.
