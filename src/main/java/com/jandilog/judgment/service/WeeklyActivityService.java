@@ -77,7 +77,8 @@ public class WeeklyActivityService {
 		WeeklyJudgment judgment = judgmentRepository.findByMemberIdAndWeekStart(memberId, weekStart).orElse(null);
 		boolean inTeam = sourceRepository.hasCurrentTeam(memberId);
 
-		List<JudgmentDay> storedDays = judgment != null && judgment.isConfirmed()
+		// 판정 시점 값은 통과·미달 주에만 쓴다. 정정·소급 면제로 면제가 된 주는 예전 수치가 남아 있어도 새로 계산해 보여준다
+		List<JudgmentDay> storedDays = judgment != null && judgment.getStatus().showsCounts()
 				? dayRepository.findByJudgmentIdOrderByDay(judgment.getId())
 				: List.of();
 		if (storedDays.size() == 7) {
@@ -139,10 +140,12 @@ public class WeeklyActivityService {
 				before, PageRequest.of(0, PAGE_SIZE + 1));
 		boolean hasNext = rows.size() > PAGE_SIZE;
 		List<WeeklyJudgment> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
+		// 제외·면제·보류 주는 인증일·기록글을 "—"(null)로 둔다. 저장된 값은 지우지 않아 통과·미달로 되돌리면 다시 보인다
 		List<JudgmentHistoryItem> items = page.stream()
 				.map(j -> new JudgmentHistoryItem(j.getWeekStart().toString(), j.getWeekStart().plusDays(6).toString(),
-						j.getStatus(), j.getSkipReason(), j.getHoldReason(), j.getVerifiedDays(), j.getRecordCount(),
-						j.isCorrected()))
+						j.getStatus(), j.getSkipReason(), j.getHoldReason(),
+						j.getStatus().showsCounts() ? j.getVerifiedDays() : null,
+						j.getStatus().showsCounts() ? j.getRecordCount() : null, j.isCorrected()))
 				.toList();
 		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getWeekStart()) : null;
 		return new JudgmentHistoryPage(items, nextCursor);
