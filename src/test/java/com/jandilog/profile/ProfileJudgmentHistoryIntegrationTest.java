@@ -33,6 +33,12 @@ class ProfileJudgmentHistoryIntegrationTest extends AdminIntegrationTest {
 			}
 			""";
 
+	private static final String MY_HISTORY = """
+			query {
+			  myJudgmentHistory { items { weekStart status skipReason } nextCursor }
+			}
+			""";
+
 	@Autowired
 	private GrassCacheService grassCacheService;
 
@@ -113,6 +119,60 @@ class ProfileJudgmentHistoryIntegrationTest extends AdminIntegrationTest {
 		JsonNode empty = history(viewer, viewer, null);
 		assertThat(empty.path("items")).isEmpty();
 		assertThat(empty.path("nextCursor").isNull()).isTrue();
+	}
+
+	@Test
+	@DisplayName("팀이 없던 주(NO_TEAM)는 이력에서 빠지고 첫 참가 주는 남으며 빠진 행이 있어도 페이지는 20개와 나머지로 나뉜다")
+	void hidesNoTeamWeeksWithoutBreakingPages() {
+		long viewer = activeMember();
+		long member = activeMember();
+		LocalDate thisWeek = JudgmentWeek.mondayOf(LocalDate.now(KST));
+		// 24주 중 2·21·22주 전이 NO_TEAM이라 보이는 행은 21개: 1, 3~20, 23, 24주 전. 21·22주 전이 페이지 경계에 걸친다
+		for (int i = 1; i <= 24; i++) {
+			LocalDate week = thisWeek.minusWeeks(i);
+			if (i == 2 || i == 21 || i == 22) {
+				noTeamWeek(member, week);
+			}
+			else if (i == 24) {
+				data.firstWeek(member, week);
+			}
+			else {
+				data.pass(member, week);
+			}
+		}
+
+		JsonNode first = history(viewer, member, null);
+		JsonNode firstItems = first.path("items");
+		assertThat(firstItems).hasSize(20);
+		assertRow(firstItems.get(0), thisWeek.minusWeeks(1), "PASS");
+		assertRow(firstItems.get(1), thisWeek.minusWeeks(3), "PASS");
+		assertRow(firstItems.get(18), thisWeek.minusWeeks(20), "PASS");
+		assertRow(firstItems.get(19), thisWeek.minusWeeks(23), "PASS");
+		String cursor = first.path("nextCursor").asText();
+		assertThat(cursor).isNotBlank();
+
+		JsonNode second = history(viewer, member, cursor);
+		assertThat(second.path("items")).hasSize(1);
+		assertRow(second.path("items").get(0), thisWeek.minusWeeks(24), "EXCLUDED");
+		assertThat(second.path("items").get(0).path("verifiedDays").isNull()).isTrue();
+		assertThat(second.path("nextCursor").isNull()).isTrue();
+
+		// 한 번도 팀이 없던 회원은 NO_TEAM 행뿐이라 빈 목록이다. 내 주간 활동의 지난 판정에서는 계속 보인다
+		long neverInTeam = activeMember();
+		for (int i = 1; i <= 3; i++) {
+			noTeamWeek(neverInTeam, thisWeek.minusWeeks(i));
+		}
+		JsonNode empty = history(viewer, neverInTeam, null);
+		assertThat(empty.path("items")).isEmpty();
+		assertThat(empty.path("nextCursor").isNull()).isTrue();
+		JsonNode mine = dataOf(asMember(neverInTeam, MY_HISTORY, Map.of())).path("myJudgmentHistory");
+		assertThat(mine.path("items")).hasSize(3);
+		assertThat(mine.path("items").get(0).path("status").asText()).isEqualTo("EXCLUDED");
+		assertThat(mine.path("items").get(0).path("skipReason").asText()).isEqualTo("NO_TEAM");
+	}
+
+	private void noTeamWeek(long memberId, LocalDate week) {
+		data.judgment(memberId, week, "EXCLUDED", "NO_TEAM", null, 0, null, null, false, week.plusDays(7).atTime(7, 0));
 	}
 
 	private static void assertRow(JsonNode row, LocalDate weekStart, String result) {
