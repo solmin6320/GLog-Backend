@@ -3,6 +3,8 @@ package com.jandilog.post.domain;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.DynamicUpdate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,7 +15,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 // V1 post_index 테이블 매핑. 판정이 MongoDB를 열지 않도록 기록글 여부·작성일만 복제해 둔다 (DB명세서 1-5)
+// 수정(is_record·team_id)과 삭제(deleted_at)가 겹쳐도 서로 덮어쓰지 않게 바뀐 컬럼만 UPDATE한다
 @Entity
+@DynamicUpdate
 @Table(name = "post_index")
 public class PostIndex {
 

@@ -2,6 +2,7 @@ package com.jandilog.post.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -37,7 +38,7 @@ public class CommentService {
 	public CommentResponse create(long memberId, String postId, String content) {
 		Post post = postService.loadAlive(postId);
 		String text = PostInputRules.commentContent(content);
-		Instant now = clock.instant();
+		Instant now = now();
 		Comment comment = Comment.create(new ObjectId(Date.from(now)), post.getId(), memberId, text, now);
 		commentRepository.insert(comment);
 		return CommentResponse.from(comment);
@@ -52,7 +53,7 @@ public class CommentService {
 		postService.loadAlive(comment.getPostId().toHexString());
 		String text = PostInputRules.commentContent(content);
 
-		if (!commentRepository.updateContentIfAlive(comment.getId(), text, clock.instant())) {
+		if (!commentRepository.updateContentIfAlive(comment.getId(), text, now())) {
 			throw new ApiException(ErrorCode.NOT_FOUND);
 		}
 		return CommentResponse.from(loadAlive(commentId));
@@ -64,7 +65,7 @@ public class CommentService {
 		requireAuthor(comment, memberId);
 		postService.loadAlive(comment.getPostId().toHexString());
 
-		if (!commentRepository.softDelete(comment.getId(), clock.instant())) {
+		if (!commentRepository.softDelete(comment.getId(), now())) {
 			throw new ApiException(ErrorCode.NOT_FOUND);
 		}
 	}
@@ -81,6 +82,11 @@ public class CommentService {
 
 	public Map<ObjectId, Integer> countByPostIds(Collection<ObjectId> postIds) {
 		return commentRepository.countAliveByPostIds(postIds);
+	}
+
+	// Mongo는 밀리초까지만 저장하므로 응답에 싣는 시각도 밀리초로 맞춘다
+	private Instant now() {
+		return clock.instant().truncatedTo(ChronoUnit.MILLIS);
 	}
 
 	// 없거나 삭제된 댓글은 모두 없는 내용(E-53)으로 본다
