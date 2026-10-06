@@ -20,6 +20,9 @@ final class PostInputRules {
 	// E-30 태그 최대 5개, 개당 20자 (제안)
 	static final int TAGS_MAX_COUNT = 5;
 	static final int TAG_MAX_LENGTH = 20;
+	// 필수 항목 항목당 5000자, 관련 커밋 링크 5개 (사용자 확정 2026-10-06)
+	static final int SECTION_MAX_LENGTH = 5000;
+	static final int COMMIT_URLS_MAX_COUNT = 5;
 	// BD-03 ⑫ 댓글 1~500자 (제안)
 	static final int COMMENT_MAX_LENGTH = 500;
 	// E-61, E-63 검색어 2자 이상 50자 이하
@@ -44,15 +47,18 @@ final class PostInputRules {
 		return title;
 	}
 
-	// 해당 종류의 항목만 남기고 앞뒤 공백을 지운다. 비어 있으면 빈 문자열로 저장해 항목 자리는 유지한다
+	// 해당 종류의 항목만 남기고 앞뒤 공백을 지운다. 비어 있으면 빈 문자열로 저장해 항목 자리는 유지한다.
+	// 항목마다 공백을 지운 글자 수가 5000자를 넘으면 오류다
 	static PostSections sections(PostType type, PostSectionsInput raw) {
 		if (raw == null) {
 			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
 		return switch (type) {
-			case TROUBLESHOOTING -> new PostSections(text(raw.problem()), text(raw.cause()), text(raw.solution()),
-					null, null);
-			case DEVLOG -> new PostSections(null, null, null, text(raw.did()), text(raw.learned()));
+			case TROUBLESHOOTING -> new PostSections(text(raw.problem(), ErrorCode.POST_PROBLEM_TOO_LONG),
+					text(raw.cause(), ErrorCode.POST_CAUSE_TOO_LONG),
+					text(raw.solution(), ErrorCode.POST_SOLUTION_TOO_LONG), null, null);
+			case DEVLOG -> new PostSections(null, null, null, text(raw.did(), ErrorCode.POST_DID_TOO_LONG),
+					text(raw.learned(), ErrorCode.POST_LEARNED_TOO_LONG));
 		};
 	}
 
@@ -97,6 +103,10 @@ final class PostInputRules {
 					throw new ApiException(ErrorCode.INVALID_COMMIT_URL);
 				}
 				urls.add(url);
+				// 중복·빈 값을 뺀 개수가 5개를 넘는 순간 멈춘다
+				if (urls.size() > COMMIT_URLS_MAX_COUNT) {
+					throw new ApiException(ErrorCode.POST_COMMIT_URLS_LIMIT_EXCEEDED);
+				}
 			}
 		}
 		return new ArrayList<>(urls);
@@ -152,8 +162,12 @@ final class PostInputRules {
 		return terms;
 	}
 
-	private static String text(String value) {
-		return value == null ? "" : value.strip();
+	private static String text(String value, ErrorCode tooLong) {
+		String text = value == null ? "" : value.strip();
+		if (length(text) > SECTION_MAX_LENGTH) {
+			throw new ApiException(tooLong);
+		}
+		return text;
 	}
 
 	private static int length(String value) {

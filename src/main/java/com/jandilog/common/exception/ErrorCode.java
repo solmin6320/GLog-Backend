@@ -35,6 +35,14 @@ public enum ErrorCode {
 	TAG_LIMIT_EXCEEDED(ErrorType.BAD_REQUEST, 400, "태그는 5개까지 달 수 있어요."),
 	// 기획서에 없는 문구(임시): 태그 한 개가 20자 초과 (E-30은 개수 문구만 있음)
 	TAG_TOO_LONG(ErrorType.BAD_REQUEST, 400, "태그는 20자까지 쓸 수 있어요."),
+	// 필수 항목 5000자 초과 (사용자 확정 2026-10-06). 문구는 5-2-8 입력 검증 표준형 "{항목}은 {N}자까지 쓸 수 있어요."
+	POST_PROBLEM_TOO_LONG(ErrorType.BAD_REQUEST, 400, "문제는 5000자까지 쓸 수 있어요."),
+	POST_CAUSE_TOO_LONG(ErrorType.BAD_REQUEST, 400, "원인은 5000자까지 쓸 수 있어요."),
+	POST_SOLUTION_TOO_LONG(ErrorType.BAD_REQUEST, 400, "해결은 5000자까지 쓸 수 있어요."),
+	POST_DID_TOO_LONG(ErrorType.BAD_REQUEST, 400, "한 일은 5000자까지 쓸 수 있어요."),
+	POST_LEARNED_TOO_LONG(ErrorType.BAD_REQUEST, 400, "배운 점은 5000자까지 쓸 수 있어요."),
+	// 관련 커밋 링크 5개 초과 (사용자 확정 2026-10-06). E-30의 태그 개수 문구와 같은 꼴
+	POST_COMMIT_URLS_LIMIT_EXCEEDED(ErrorType.BAD_REQUEST, 400, "관련 커밋 링크는 5개까지 달 수 있어요."),
 	// EX-BD04-01
 	TITLE_REQUIRED(ErrorType.BAD_REQUEST, 400, "제목을 입력해 주세요."),
 	// E-61, EX-BD01-01
