@@ -1,0 +1,22 @@
+# 프로필 팀별 경고 (화면설계서 PR-01 ⑨, 기능명세서 8장, Q-13 확정). 본인 · 타인이 같은 모양이다
+
+extend type Profile {
+    """
+    팀별 경고 (PR-01 ⑨). 경고 1개에 팀이 여러 개 붙으므로 중복 집계이고, 줄마다 센 값을 더한 합계는 누적 경고 수와 다를 수 있다.
+    ⑧ 경고 합계와 같은 기준으로 센다: 현재 경고 수에 들어가는 경고만 세고 이행 완료·차감된 경고는 뺀다.
+    경고가 없으면 빈 목록이고, 판정 보류가 남아 있으면 계산하지 않아 onHold만 true다
+    """
+    teamWarnings: ProfileTeamWarnings!
+}
+
+type ProfileTeamWarnings {
+    onHold: Boolean!
+    "공개 팀(이름순) → 비공개 팀 → 삭제된 팀 순"
+    teams: [ProfileTeamWarning!]!
+}
+
+"{팀 이름} {count}회. 비공개 팀은 '비공개 팀', 삭제된 팀은 '삭제된 팀'으로 나오고 열람자를 구분하지 않는다. 비공개·삭제된 팀은 여러 팀이어도 한 줄이다"
+type ProfileTeamWarning {
+    name: String!
+    count: Int!
+}
