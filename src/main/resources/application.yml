@@ -21,6 +21,13 @@ spring:
     url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:jandilog}?connectionCollation=utf8mb4_general_ci
     username: ${DB_USERNAME:jandilog}
     password: ${DB_PASSWORD:jandilog}
+    # 풀 대기·연결·쿼리 응답 상한(밀리초). DB가 멈춰도 요청이 무한정 쌓이지 않게 한다. 환경변수로 덮어쓴다
+    # socketTimeout은 InnoDB 락 대기 기본값(50초)보다 길게 둬서 락 대기 오류는 DB가 먼저 낸다
+    hikari:
+      connection-timeout: ${DB_POOL_WAIT_TIMEOUT_MS:10000}
+      data-source-properties:
+        connectTimeout: ${DB_CONNECT_TIMEOUT_MS:10000}
+        socketTimeout: ${DB_SOCKET_TIMEOUT_MS:60000}
 
   # 스키마는 Flyway만 관리 (기능명세서 10장). 운영 clean 금지
   flyway:
@@ -48,9 +55,16 @@ spring:
       password: ${REDIS_PASSWORD:}
       ssl:
         enabled: ${REDIS_SSL:false}
+      # 명령 응답·연결 대기 상한. Redis가 멈춰도 요청이 오래 걸려 쌓이지 않게 한다. 환경변수로 덮어쓴다
+      timeout: ${REDIS_COMMAND_TIMEOUT:5s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:5s}
 
   jackson:
     time-zone: Asia/Seoul
+
+  # 종료 신호를 받으면 처리 중인 요청을 이 시간까지 기다린다. docker stop 기본 유예(10초)보다 짧게 둔다
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:8s}
 
 # OAuth 인증 요청을 잇는 동안에만 세션을 쓴다. 그 뒤 세션은 버린다
 server:
@@ -62,6 +76,8 @@ server:
         same-site: lax
         # 기본 true. 로컬에서 브라우저가 http://localhost의 Secure 쿠키를 거부하면 SESSION_COOKIE_SECURE=false
         secure: ${SESSION_COOKIE_SECURE:true}
+  # 종료 때 새 요청은 받지 않고 처리 중인 요청을 마친 뒤 내린다
+  shutdown: graceful
 
 jandilog:
   auth:
@@ -84,6 +100,13 @@ jandilog:
   grass:
     # 잔디 조회용 GitHub 서버 토큰. 기본값 없음, 환경변수로만 받고 로그에 남기지 않는다
     github-api-token: ${GITHUB_API_TOKEN}
+
+  mongo:
+    # MongoDB 연결·응답·서버 선택·풀 대기 상한. 환경변수로 덮어쓰고, MONGODB_URI에 같은 옵션이 있으면 URI 값을 쓴다
+    connect-timeout: ${MONGO_CONNECT_TIMEOUT:5s}
+    socket-timeout: ${MONGO_SOCKET_TIMEOUT:30s}
+    server-selection-timeout: ${MONGO_SERVER_SELECTION_TIMEOUT:10s}
+    pool-wait-timeout: ${MONGO_POOL_WAIT_TIMEOUT:10s}
 
 # 헬스체크만 노출하고 Redis는 제외 (Upstash 명령 수 절약, 기능명세서 10장)
 management:

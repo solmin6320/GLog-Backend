@@ -12,3 +12,8 @@ out/
 .claude/worktrees/
 # 기획서 원본(로컬 참고용)
 백엔드 기획서/
+# 환경변수 파일(예시 파일만 추적)
+.env.*
+!.env.example
+# 인증서·개인키
+*.pem
