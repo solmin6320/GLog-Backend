@@ -114,6 +114,7 @@ abstract class TeamBoardTestBase extends AuthIntegrationTest {
 					+ ids + "))");
 			jdbc.update("delete from weekly_judgment where member_id in (" + ids + ")");
 			jdbc.update("delete from personal_exemption where member_id in (" + ids + ") or requested_by in (" + ids + ")");
+			jdbc.update("delete from penalty_fulfillment where member_id in (" + ids + ") or admin_id in (" + ids + ")");
 			jdbc.update("delete from team_invitation where invitee_id in (" + ids + ")");
 			for (long id : memberIds) {
 				deleteKeys("grass:" + id + ":*");
@@ -256,15 +257,25 @@ abstract class TeamBoardTestBase extends AuthIntegrationTest {
 
 	// ----- 판정·경고 행 -----
 
-	// 판정 이력(미달)과 경고, 경고의 팀 카테고리를 직접 심는다
-	protected void warning(long memberId, LocalDate weekStart, long categoryTeamId) {
+	// 경고 없이 판정 상태만 남긴 주 (통과 이력·보류 등). 근거 7일은 만들지 않는다
+	protected void judgmentRow(long memberId, LocalDate weekStart, String status) {
+		jdbc.update("insert into weekly_judgment (member_id, week_start, status, hold_reason, retry_count, corrected,"
+				+ " judged_at) values (?, ?, ?, ?, 0, false, ?)", memberId, weekStart, status,
+				"HOLD".equals(status) ? "API_ERROR" : null,
+				"HOLD".equals(status) ? null : weekStart.plusDays(7).atTime(7, 0));
+	}
+
+	// 한 주 미달 판정 이력과 경고 1개, 경고에 붙는 팀 카테고리들을 직접 심는다
+	protected void warning(long memberId, LocalDate weekStart, long... categoryTeamIds) {
 		jdbc.update("insert into weekly_judgment (member_id, week_start, status, retry_count, corrected, judged_at)"
 				+ " values (?, ?, 'FAIL', 0, false, ?)", memberId, weekStart, weekStart.plusDays(7).atTime(7, 0));
 		jdbc.update("insert into warning (member_id, week_start, created_at) values (?, ?, ?)", memberId, weekStart,
 				weekStart.plusDays(7).atTime(7, 0));
 		Long warningId = jdbc.queryForObject("select id from warning where member_id = ? and week_start = ?",
 				Long.class, memberId, weekStart);
-		jdbc.update("insert into warning_team (warning_id, team_id) values (?, ?)", warningId, categoryTeamId);
+		for (long teamId : categoryTeamIds) {
+			jdbc.update("insert into warning_team (warning_id, team_id) values (?, ?)", warningId, teamId);
+		}
 	}
 
 	// 확정된 판정 한 건과 그 주 7일치 근거
