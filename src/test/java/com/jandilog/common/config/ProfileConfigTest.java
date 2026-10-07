@@ -15,10 +15,14 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.env.MockEnvironment;
+
+import com.zaxxer.hikari.HikariDataSource;
 
 // application.yml(기본·로컬)과 application-prod.yml(운영)의 값을 실제 기동 없이 확인한다.
 // MockEnvironment는 OS 환경변수와 .env를 읽지 않아서 "환경변수 누락"을 그대로 재현할 수 있다
@@ -241,6 +245,98 @@ class ProfileConfigTest {
 
 		assertThat(env.getProperty("management.endpoints.web.exposure.include")).isEqualTo("health");
 		assertThat(env.getProperty("management.endpoint.health.show-details")).isEqualTo("never");
+	}
+
+	// ----- 타임아웃·graceful shutdown (환경변수로 덮어쓸 수 있고, 기본값은 로컬·prod 같음) -----
+
+	private static Duration duration(MockEnvironment env, String key) {
+		return Binder.get(env).bind(key, Duration.class).get();
+	}
+
+	private static HikariDataSource bindHikari(MockEnvironment env) {
+		return Binder.get(env).bind("spring.datasource.hikari", Bindable.of(HikariDataSource.class)).get();
+	}
+
+	@Test
+	void DB_풀_타임아웃_기본값은_10초_연결_10초_응답_60초다() {
+		for (MockEnvironment env : List.of(environment(false, Map.of()), environment(true, allProdVariables()))) {
+			HikariDataSource hikari = bindHikari(env);
+
+			assertThat(hikari.getConnectionTimeout()).isEqualTo(10_000);
+			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("10000");
+			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("60000");
+		}
+	}
+
+	@Test
+	void DB_풀_타임아웃은_환경변수로_바꿀_수_있다() {
+		Map<String, String> variables = Map.of("DB_POOL_WAIT_TIMEOUT_MS", "3000", "DB_CONNECT_TIMEOUT_MS", "4000",
+				"DB_SOCKET_TIMEOUT_MS", "5000");
+		Map<String, String> prod = new HashMap<>(allProdVariables());
+		prod.putAll(variables);
+
+		for (MockEnvironment env : List.of(environment(false, variables), environment(true, prod))) {
+			HikariDataSource hikari = bindHikari(env);
+
+			assertThat(hikari.getConnectionTimeout()).isEqualTo(3_000);
+			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("4000");
+			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("5000");
+		}
+	}
+
+	@Test
+	void JDBC_응답_상한은_InnoDB_락_대기_기본값_50초보다_길다() {
+		long socketTimeout = Long.parseLong(
+				bindHikari(environment(false, Map.of())).getDataSourceProperties().getProperty("socketTimeout"));
+
+		assertThat(socketTimeout).isGreaterThan(50_000);
+	}
+
+	@Test
+	void Redis_타임아웃_기본값은_명령_5초_연결_5초이고_환경변수로_바꿀_수_있다() {
+		for (MockEnvironment env : List.of(environment(false, Map.of()), environment(true, allProdVariables()))) {
+			assertThat(duration(env, "spring.data.redis.timeout")).isEqualTo(Duration.ofSeconds(5));
+			assertThat(duration(env, "spring.data.redis.connect-timeout"))
+					.isEqualTo(Duration.ofSeconds(5));
+		}
+		Map<String, String> prod = new HashMap<>(allProdVariables());
+		prod.put("REDIS_COMMAND_TIMEOUT", "2s");
+		prod.put("REDIS_CONNECT_TIMEOUT", "3s");
+		MockEnvironment env = environment(true, prod);
+
+		assertThat(duration(env, "spring.data.redis.timeout")).isEqualTo(Duration.ofSeconds(2));
+		assertThat(duration(env, "spring.data.redis.connect-timeout")).isEqualTo(Duration.ofSeconds(3));
+	}
+
+	@Test
+	void Mongo_타임아웃_기본값과_환경변수_덮어쓰기() {
+		MongoTimeoutProperties defaults = Binder.get(environment(true, allProdVariables()))
+				.bind("jandilog.mongo", MongoTimeoutProperties.class).get();
+
+		assertThat(defaults.connectTimeout()).isEqualTo(Duration.ofSeconds(5));
+		assertThat(defaults.socketTimeout()).isEqualTo(Duration.ofSeconds(30));
+		assertThat(defaults.serverSelectionTimeout()).isEqualTo(Duration.ofSeconds(10));
+		assertThat(defaults.poolWaitTimeout()).isEqualTo(Duration.ofSeconds(10));
+
+		MongoTimeoutProperties custom = Binder.get(environment(false, Map.of("MONGO_CONNECT_TIMEOUT", "2s",
+				"MONGO_SOCKET_TIMEOUT", "20s", "MONGO_SERVER_SELECTION_TIMEOUT", "4s", "MONGO_POOL_WAIT_TIMEOUT", "6s")))
+				.bind("jandilog.mongo", MongoTimeoutProperties.class).get();
+
+		assertThat(custom.connectTimeout()).isEqualTo(Duration.ofSeconds(2));
+		assertThat(custom.socketTimeout()).isEqualTo(Duration.ofSeconds(20));
+		assertThat(custom.serverSelectionTimeout()).isEqualTo(Duration.ofSeconds(4));
+		assertThat(custom.poolWaitTimeout()).isEqualTo(Duration.ofSeconds(6));
+	}
+
+	@Test
+	void graceful_shutdown이_켜져_있고_대기_시간은_8초_기본이다() {
+		for (MockEnvironment env : List.of(environment(false, Map.of()), environment(true, allProdVariables()))) {
+			assertThat(env.getProperty("server.shutdown")).isEqualTo("graceful");
+			assertThat(duration(env, "spring.lifecycle.timeout-per-shutdown-phase"))
+					.isEqualTo(Duration.ofSeconds(8));
+		}
+		MockEnvironment custom = environment(false, Map.of("SHUTDOWN_TIMEOUT", "25s"));
+		assertThat(duration(custom, "spring.lifecycle.timeout-per-shutdown-phase")).isEqualTo(Duration.ofSeconds(25));
 	}
 
 	@Test
