@@ -63,7 +63,7 @@ class WarningRecalculatorBaselineTest {
 		assertThat(result.deductedWarningWeeks()).isEmpty();
 	}
 
-	// 아래 경계는 구현이 정한 규칙을 그대로 고정한다: 주가 끝나는 시각(다음 월요일 00:00) <= 이행 시각이면 이전 주 (결정 대기)
+	// 회의 결정(2026-10-07): 이행 시각이 주 종료 시각(다음 월요일 00:00)과 같으면 이행 이전으로 본다 (이하 비교)
 	static Stream<Arguments> 경계_사례() {
 		return Stream.of(
 				Arguments.of("주 끝 시각과 이행 시각이 같으면 그 주는 이전", endOf(2), 1, new int[] {0, 1, 2}),
@@ -80,7 +80,7 @@ class WarningRecalculatorBaselineTest {
 
 	@ParameterizedTest(name = "{0}")
 	@MethodSource("경계_사례")
-	void 결정_대기_이행_기준선_경계는_주_끝_시각_이하면_이전_주다(String name, LocalDateTime fulfilledAt, int warningCount,
+	void 이행_기준선_경계는_주_끝_시각_이하면_이전_주다(String name, LocalDateTime fulfilledAt, int warningCount,
 			int[] beforeWeeks) {
 		var result = assertState(run("FFFF", fulfilledAt), warningCount, 0);
 		assertBeforeBaseline(result, beforeWeeks);

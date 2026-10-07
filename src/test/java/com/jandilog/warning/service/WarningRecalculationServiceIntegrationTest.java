@@ -255,7 +255,8 @@ class WarningRecalculationServiceIntegrationTest extends WarningIntegrationTest 
 	}
 
 	@Test
-	void 결정_대기_이행_시각이_주_끝과_같으면_그_주는_이전이고_1초_빠르면_이후다() {
+	void 이행_시각이_주_끝과_같으면_그_주는_이전이고_1초_빠르면_이후다() {
+		// 회의 결정(2026-10-07): 이행 시각이 주 종료 시각과 같으면 이행 이전으로 본다
 		long member = fixture.member();
 		long admin = fixture.admin();
 		fixture.history(member, "FFFF");
