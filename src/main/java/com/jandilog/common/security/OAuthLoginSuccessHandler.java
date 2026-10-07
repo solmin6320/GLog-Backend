@@ -5,6 +5,7 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -65,11 +66,11 @@ public class OAuthLoginSuccessHandler implements AuthenticationSuccessHandler {
 		}
 	}
 
-	// 첫 로그인이 동시에 두 번 들어오면 github_id UNIQUE에 걸리므로 한 번 더 조회한다
+	// 첫 로그인이 동시에 두 번 들어오면 github_id UNIQUE 충돌이나 INSERT 데드락이 나므로 한 번 더 조회한다
 	private Member loginWithRetry(long githubId, String githubLogin, String githubName) {
 		try {
 			return memberService.loginWithGithub(githubId, githubLogin, githubName);
-		} catch (DataIntegrityViolationException e) {
+		} catch (DataIntegrityViolationException | PessimisticLockingFailureException e) {
 			return memberService.loginWithGithub(githubId, githubLogin, githubName);
 		}
 	}
