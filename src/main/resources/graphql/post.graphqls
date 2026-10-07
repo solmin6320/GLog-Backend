@@ -1,4 +1,5 @@
-# 게시판 (기능명세서 3장): 트러블슈팅·개발일지 글, 태그, 검색, 댓글. 모든 회원 호출 가능, 수정·삭제는 작성자 본인만
+# 게시판 (기능명세서 3장): 트러블슈팅·개발일지 글, 태그, 검색, 댓글. 모든 회원 호출 가능, 삭제는 작성자 본인만,
+# 수정은 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장(기능명세서 2장)
 
 extend type Query {
     """
@@ -16,15 +17,18 @@ extend type Query {
 extend type Mutation {
     "글을 쓴다. 필수 항목을 모두 채우지 않아도 저장되지만 기록글로 인정되지 않는다(isRecord=false)"
     createPost(input: CreatePostInput!): Post!
-    "글을 고친다 (작성자 본인만). 글 종류와 작성일은 바뀌지 않는다"
+    """
+    글을 고친다 (작성자 본인 또는 그 글이 연결된 팀의 현재 팀장). 글 종류와 작성일은 바뀌지 않는다.
+    팀장이 남의 글을 고칠 때는 teamId를 읽지 않고 기존 팀 연결을 유지한다. 그 밖의 사람은 FORBIDDEN
+    """
     updatePost(id: ID!, input: UpdatePostInput!): Post!
-    "글을 지운다 (작성자 본인만, 소프트 삭제)"
+    "글을 지운다 (작성자 본인만, 소프트 삭제). 팀장도 지울 수 없다"
     deletePost(id: ID!): Boolean!
     "댓글을 쓴다. 삭제된 글에는 달 수 없다 (1~500자)"
     createComment(postId: ID!, content: String!): Comment!
-    "댓글을 고친다 (작성자 본인만)"
+    "댓글을 고친다 (작성자 본인 또는 그 글이 연결된 팀의 현재 팀장)"
     updateComment(id: ID!, content: String!): Comment!
-    "댓글을 지운다 (작성자 본인만, 소프트 삭제)"
+    "댓글을 지운다 (작성자 본인만, 소프트 삭제). 팀장도 지울 수 없다"
     deleteComment(id: ID!): Boolean!
 }
 
@@ -119,7 +123,7 @@ input CreatePostInput {
     teamId: ID
 }
 
-"모든 값을 통째로 바꾼다. 생략한 tags·commitUrls·teamId는 비워진다"
+"모든 값을 통째로 바꾼다. 생략한 tags·commitUrls·teamId는 비워진다. 팀장이 남의 글을 고칠 때 teamId는 무시된다"
 input UpdatePostInput {
     title: String!
     sections: PostSectionsInput!
