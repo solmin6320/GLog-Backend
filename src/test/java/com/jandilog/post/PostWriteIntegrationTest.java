@@ -317,47 +317,6 @@ class PostWriteIntegrationTest extends BoardIntegrationTest {
 		assertThat(mongoPostCount(author)).isZero();
 	}
 
-	// ----- 팀 연결 동기화 (DB명세서 4-4: Mongo teamId와 post_index.team_id는 같은 값) -----
-	// 팀 소속 검증은 팀 기능 합류 뒤에 붙는다. 여기서는 id가 두 곳에 같이 적히는지만 본다
-
-	private static Long mongoTeamId(Document doc) {
-		Object value = doc.get("teamId");
-		return value == null ? null : ((Number) value).longValue();
-	}
-
-	@Test
-	void 팀_id를_함께_보내면_Mongo와_post_index에_같은_팀이_저장된다() {
-		Map<String, Object> input = recordPost("팀 글");
-		input.put("teamId", "7");
-
-		JsonNode post = ok(createPost(author, input)).data().path("createPost");
-
-		String id = post.path("id").asText();
-		assertThat(post.path("teamId").asText()).isEqualTo("7");
-		assertThat(mongoTeamId(mongoPost(id))).isEqualTo(7L);
-		assertThat(indexRow(id).orElseThrow().teamId()).isEqualTo(7L);
-		assertThat(ok(detail(other, id)).data().path("post").path("teamId").asText()).isEqualTo("7");
-	}
-
-	@Test
-	void 수정에서_팀을_바꾸면_두_곳이_함께_바뀌고_생략하면_함께_비워진다() {
-		Map<String, Object> create = recordPost("팀 글");
-		create.put("teamId", "7");
-		String id = newPost(author, create);
-
-		Map<String, Object> change = updateInput("팀 글", "문제", "원인", "해결");
-		change.put("teamId", "9");
-		JsonNode changed = ok(update(author, id, change)).data().path("updatePost");
-		assertThat(changed.path("teamId").asText()).isEqualTo("9");
-		assertThat(mongoTeamId(mongoPost(id))).isEqualTo(9L);
-		assertThat(indexRow(id).orElseThrow().teamId()).isEqualTo(9L);
-
-		JsonNode cleared = ok(update(author, id, updateInput("팀 글", "문제", "원인", "해결"))).data().path("updatePost");
-		assertThat(cleared.path("teamId").isNull()).isTrue();
-		assertThat(mongoTeamId(mongoPost(id))).isNull();
-		assertThat(indexRow(id).orElseThrow().teamId()).isNull();
-	}
-
 	@Test
 	void 글_종류를_빼면_스키마_검증에서_거부된다() {
 		Map<String, Object> input = recordPost("제목");

@@ -112,7 +112,7 @@ final class PostInputRules {
 		return new ArrayList<>(urls);
 	}
 
-	// 팀 연결은 id만 저장한다. 팀 소속 검증은 팀 모듈 합류 뒤에 한다
+	// 팀 연결은 id만 읽는다. 소속·삭제 여부 검증은 PostService가 TeamAccessService로 한다
 	static Long teamId(String raw) {
 		if (raw == null || raw.isBlank()) {
 			return null;

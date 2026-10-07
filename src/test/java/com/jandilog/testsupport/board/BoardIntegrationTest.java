@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -22,6 +23,9 @@ import org.springframework.data.mongodb.core.query.Query;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jandilog.member.domain.MemberRole;
 import com.jandilog.member.domain.MemberStatus;
+import com.jandilog.team.service.TeamJoinService;
+import com.jandilog.team.service.TeamLeaveService;
+import com.jandilog.team.service.TeamService;
 import com.jandilog.testsupport.auth.AuthIntegrationTest;
 import com.jandilog.testsupport.auth.GraphQlHttpClient.GraphQlResponse;
 
@@ -73,8 +77,22 @@ public abstract class BoardIntegrationTest extends AuthIntegrationTest {
 
 	@Autowired
 	protected MongoTemplate mongo;
+	@Autowired
+	private TeamService teamService;
+	@Autowired
+	private TeamJoinService teamJoinService;
+	@Autowired
+	private TeamLeaveService teamLeaveService;
+
+	// 글에 연결할 실제 팀 (team 서비스로 만들고 끝에 내가 만든 팀만 지운다)
+	protected TeamFixture teams;
 
 	private final List<Long> boardMemberIds = new ArrayList<>();
+
+	@BeforeEach
+	void setUpTeamFixture() {
+		teams = new TeamFixture(teamService, teamJoinService, teamLeaveService, jdbc);
+	}
 
 	// ----- 회원 -----
 
@@ -126,6 +144,8 @@ public abstract class BoardIntegrationTest extends AuthIntegrationTest {
 			jdbc.update("delete from post_index where author_id = ?", id);
 			jdbc.update("delete from notice where author_id = ?", id);
 		}
+		// 팀장·팀원 행이 회원을 참조하므로 회원 삭제 전에 팀을 지운다
+		teams.cleanup();
 		boardMemberIds.clear();
 	}
 
