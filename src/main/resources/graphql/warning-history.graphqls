@@ -1,0 +1,47 @@
+# 내 경고 이력 표 (화면설계서 AC-02 ③, 기능명세서 6장, Q-13 확정). 본인 것만 조회한다
+
+extend type Query {
+    """
+    내 경고 이력. 최근 주부터 커서 기반 20개 (E-57).
+    경고 수를 저장하지 않고 판정 이력을 처음부터 다시 훑은 결과로 상태를 정한다.
+    삭제 표시된 경고와 정정·소급 면제로 미달이 아니게 된 주의 경고는 나오지 않는다.
+    판정 보류가 남아 있으면 상태를 정할 수 없어 onHold만 true이고 items는 비어 있다
+    """
+    myWarningHistory(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): WarningHistoryPage!
+}
+
+"경고 이력의 상태 (Q-13)"
+enum WarningHistoryStatus {
+    "벌칙 이행 이후 살아 있고 차감되지 않아 현재 경고 수에 들어간다 (유효)"
+    ACTIVE
+    "2주 연속 통과로 차감됐다 (차감됨)"
+    DEDUCTED
+    "벌칙 이행 체크 이전에 받았다. 기록만 남고 현재 경고 수에는 넣지 않는다 (이행 완료)"
+    FULFILLED
+}
+
+"경고 이력 표 한 행"
+type WarningHistoryItem {
+    "경고를 받은 주 월요일 (yyyy-MM-dd)"
+    weekStart: String!
+    "그 주 일요일 (yyyy-MM-dd)"
+    weekEnd: String!
+    "사유: 인증일 수. 알 수 없으면 null"
+    verifiedDays: Int
+    "사유: 기록글 수. 알 수 없으면 null"
+    recordCount: Int
+    "팀 카테고리 표시 이름. 공개 팀은 이름, 비공개 팀은 '비공개 팀', 삭제된 팀은 '삭제된 팀'. 열람자를 구분하지 않는다"
+    categories: [String!]!
+    status: WarningHistoryStatus!
+}
+
+type WarningHistoryPage {
+    "판정 보류가 남아 있어 계산을 미룬 상태"
+    onHold: Boolean!
+    items: [WarningHistoryItem!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}

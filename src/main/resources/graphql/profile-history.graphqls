@@ -1,0 +1,43 @@
+# 프로필 주간 판정 이력 (화면설계서 PR-01 ⑩, 기능명세서 5·8장). 본인 · 타인이 같은 모양이고 팀 이름은 싣지 않는다
+
+extend type Profile {
+    """
+    주간 판정 이력 (PR-01 ⑩). 최근 주부터 커서 기반 20개 (E-57).
+    첫 페이지 맨 위에는 이번 주 IN_PROGRESS 행이 하나 더 붙는다(판정 대상 주이고 아직 판정 전일 때만, 20개에 세지 않는다).
+    팀이 없던 주(제외 · NO_TEAM)는 나오지 않고 첫 참가 주와 면제 주는 나온다. 판정 기록이 없으면 빈 목록이다 (팀 미소속 · 첫 주, EX-PR01-03)
+    """
+    judgmentHistory(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): ProfileJudgmentPage!
+}
+
+"""
+판정 이력의 결과 (PR-01 ⑩). PASS 통과 / FAIL 미달(경고) / EXEMPT 면제 / EXCLUDED 제외 / IN_PROGRESS 진행 중.
+이번 주와 아직 확정되지 않은 보류 주가 IN_PROGRESS로 나온다
+"""
+enum ProfileJudgmentResult {
+    PASS
+    FAIL
+    EXEMPT
+    EXCLUDED
+    IN_PROGRESS
+}
+
+"판정 이력 한 행. 면제·제외 주와 보류 주는 인증일·기록글이 null이다 (AC-01 ⑤ '—')"
+type ProfileJudgmentWeek {
+    "그 주 월요일 (yyyy-MM-dd)"
+    weekStart: String!
+    "그 주 일요일 (yyyy-MM-dd)"
+    weekEnd: String!
+    result: ProfileJudgmentResult!
+    "인증일 수. 진행 중인 이번 주는 잔디 캐시가 없으면 null"
+    verifiedDays: Int
+    recordCount: Int
+}
+
+type ProfileJudgmentPage {
+    items: [ProfileJudgmentWeek!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
