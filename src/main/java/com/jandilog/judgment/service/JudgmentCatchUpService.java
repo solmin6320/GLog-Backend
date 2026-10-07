@@ -19,6 +19,7 @@ import com.jandilog.judgment.repository.JudgmentHistoryRepository;
 // 기동 시 미판정 주차 따라잡기 (화면설계서 E-34·FC-02). 월요일 판정 시각에 서버가 꺼져 있었으면 기동할 때 빠진 주차를 판정한다.
 // 판정 자체는 스케줄러와 같은 WeeklyJudgmentBatchService.judgeWeek를 쓰고(같은 잔디 캐시·같은 멱등 규칙), 새 GitHub 호출 경로는 없다.
 // 같은 주를 다시 돌려도 (회원+주차시작일) 멱등이라 중복 판정이 생기지 않는다 (E-35)
+// 가장 최근 판정 주차는 판정 행이 없는 회원만 보충하며, 확정·보류 행은 다시 돌리지 않는다 (Q-07, Q-09)
 @Service
 public class JudgmentCatchUpService {
 
@@ -51,14 +52,21 @@ public class JudgmentCatchUpService {
 		this.clock = clock;
 	}
 
-	// 판정 이력이 있는 가장 최근 주차 뒤로 빠진 주차를 오래된 순으로 판정한다. 이력이 하나도 없는 새 DB에서는 아무것도 하지 않는다
+	// 판정 이력이 있는 가장 최근 주차는 판정 행이 없는 회원만 보충하고, 그 뒤로 빠진 주차는 오래된 순으로 판정한다.
+	// 이력이 하나도 없는 새 DB에서는 아무것도 하지 않는다
 	public Result catchUp() {
 		Optional<LocalDate> latest = historyRepository.findLatestWeekStart();
 		if (latest.isEmpty()) {
 			log.info("판정 이력이 없어 기동 시 미판정 주차 확인을 건너뛰어요");
 			return new Result(List.of(), List.of());
 		}
-		List<LocalDate> missing = missingWeeks(latest.get(), LocalDateTime.now(clock.withZone(KST)));
+		LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
+		// 판정할 때가 지난 최근 주만 보충한다. 끝나지 않은 주는 판정하지 않는다
+		if (!latest.get().isAfter(lastDueWeek(now))) {
+			log.info("가장 최근 판정 주차의 미판정 회원을 보충해요 week={}", latest.get());
+			batchService.judgeMissingMembers(latest.get());
+		}
+		List<LocalDate> missing = missingWeeks(latest.get(), now);
 		if (missing.isEmpty()) {
 			return new Result(List.of(), List.of());
 		}

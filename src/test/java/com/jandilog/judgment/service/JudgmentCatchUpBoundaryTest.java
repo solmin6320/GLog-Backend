@@ -95,6 +95,79 @@ class JudgmentCatchUpBoundaryTest {
 		assertThat(result.judgedWeeks()).isEmpty();
 		assertThat(result.leftWeeks()).isEmpty();
 		verify(batchService, never()).judgeWeek(any());
+		verify(batchService, never()).judgeMissingMembers(any());
+	}
+
+	// ---- 가장 최근 판정 주의 미판정 회원 보충 ----
+
+	@Test
+	void 가장_최근_판정_주가_판정할_때가_지났으면_그_주를_먼저_보충하고_뒤_주를_판정한다() {
+		LocalDate latest = MON_1005.minusWeeks(2);
+		LocalDate w1 = latest.plusWeeks(1);
+		when(historyRepository.findLatestWeekStart()).thenReturn(Optional.of(latest));
+		when(batchService.judgeWeek(w1)).thenReturn(SUMMARY);
+
+		service(LocalDateTime.of(2026, 10, 12, 9, 0)).catchUp();
+
+		InOrder order = inOrder(batchService);
+		order.verify(batchService).judgeMissingMembers(latest);
+		order.verify(batchService).judgeWeek(w1);
+	}
+
+	@Test
+	void 판정할_주가_더_없어도_가장_최근_판정_주는_보충한다() {
+		when(historyRepository.findLatestWeekStart()).thenReturn(Optional.of(MON_1005));
+
+		Result result = service(LocalDateTime.of(2026, 10, 12, 9, 0)).catchUp();
+
+		verify(batchService).judgeMissingMembers(MON_1005);
+		verify(batchService, never()).judgeWeek(any());
+		assertThat(result.judgedWeeks()).isEmpty();
+		assertThat(result.leftWeeks()).isEmpty();
+	}
+
+	@Test
+	void 판정_시각_전이면_아직_끝나지_않은_가장_최근_주는_보충하지_않고_정각부터_보충한다() {
+		when(historyRepository.findLatestWeekStart()).thenReturn(Optional.of(MON_1005));
+
+		service(LocalDateTime.of(2026, 10, 12, 6, 59, 59, 999_999_999)).catchUp();
+		verify(batchService, never()).judgeMissingMembers(any());
+
+		service(LocalDateTime.of(2026, 10, 12, 7, 0)).catchUp();
+		verify(batchService, times(1)).judgeMissingMembers(MON_1005);
+	}
+
+	@Test
+	void 가장_최근_판정_주가_진행_중인_주면_보충도_판정도_하지_않는다() {
+		when(historyRepository.findLatestWeekStart()).thenReturn(Optional.of(MON_1005));
+
+		Result result = service(LocalDateTime.of(2026, 10, 8, 9, 0)).catchUp();
+
+		assertThat(result.judgedWeeks()).isEmpty();
+		verify(batchService, never()).judgeMissingMembers(any());
+		verify(batchService, never()).judgeWeek(any());
+	}
+
+	@Test
+	void 판정_이력이_없으면_보충하지_않는다() {
+		when(historyRepository.findLatestWeekStart()).thenReturn(Optional.empty());
+
+		service(LocalDateTime.of(2026, 10, 12, 9, 0)).catchUp();
+
+		verify(batchService, never()).judgeMissingMembers(any());
+		verify(batchService, never()).judgeWeek(any());
+	}
+
+	@Test
+	void 보충이_예외로_실패하면_뒤_주는_판정하지_않고_예외를_올린다() {
+		LocalDate latest = MON_1005.minusWeeks(1);
+		when(historyRepository.findLatestWeekStart()).thenReturn(Optional.of(latest));
+		when(batchService.judgeMissingMembers(latest)).thenThrow(new IllegalStateException("DB 연결 끊김"));
+
+		assertThatThrownBy(() -> service(LocalDateTime.of(2026, 10, 12, 9, 0)).catchUp())
+				.isInstanceOf(IllegalStateException.class);
+
+		verify(batchService, never()).judgeWeek(any());
 	}
 
 	// ---- 중간 실패와 재시도 ----
