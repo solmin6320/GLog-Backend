@@ -19,6 +19,32 @@ public enum ErrorCode {
 	FORBIDDEN(ErrorType.FORBIDDEN, 403, "이 페이지에 들어올 권한이 없어요."),
 	// E-05, E-06
 	AUTH_CODE_INVALID(ErrorType.BAD_REQUEST, 400, "로그인 정보가 만료됐어요. 처음부터 다시 해주세요."),
+	// E-10
+	TEAM_CODE_NOT_FOUND(ErrorType.BAD_REQUEST, 400, "그런 초대코드가 없어요. 다시 확인해 주세요."),
+	// E-11
+	TEAM_ALREADY_JOINED(ErrorType.BAD_REQUEST, 409, "이미 참가한 팀이에요."),
+	// E-12: 추방 사실과 남은 차단 기간을 드러내지 않는다
+	TEAM_JOIN_BLOCKED(ErrorType.FORBIDDEN, 403, "이 팀에는 참가할 수 없어요. 팀장에게 문의해 주세요."),
+	// E-15
+	INVITEE_NOT_FOUND(ErrorType.NOT_FOUND, 404, "그 아이디의 회원을 찾을 수 없어요. 먼저 가입해야 초대할 수 있어요."),
+	// E-16
+	INVITEE_ALREADY_MEMBER(ErrorType.BAD_REQUEST, 409, "이미 팀에 있는 회원이에요."),
+	// 기획서에 없는 문구(임시): 같은 사람에게 대기 중인 초대가 이미 있음
+	INVITATION_DUPLICATE(ErrorType.BAD_REQUEST, 409, "이미 초대를 보냈어요."),
+	// E-17
+	INVITATION_ALREADY_JOINED(ErrorType.BAD_REQUEST, 409, "이미 참가한 팀이에요. 초대는 정리했어요."),
+	// E-18
+	TEAM_GONE(ErrorType.NOT_FOUND, 404, "없어진 팀이에요."),
+	// E-19
+	LEADER_MUST_TRANSFER(ErrorType.BAD_REQUEST, 409, "팀장은 다른 팀원에게 팀장을 넘긴 뒤에 나갈 수 있어요."),
+	// E-20: 위임할 팀원이 없는 팀장은 나갈 수 없고 팀 삭제만 가능하다. 문구는 삭제 확인 질문이다
+	LEADER_LAST_MEMBER(ErrorType.BAD_REQUEST, 409, "혼자 있는 팀이에요. 나가면 팀이 삭제돼요. 삭제할까요?"),
+	// EX-TM02-01
+	TEAM_NAME_REQUIRED(ErrorType.BAD_REQUEST, 400, "팀 이름을 입력해 주세요."),
+	// 기획서에 없는 문구(임시): 팀원이 아닌 사람을 추방·위임 대상으로 지정
+	TEAM_MEMBER_NOT_FOUND(ErrorType.NOT_FOUND, 404, "그 팀원을 찾을 수 없어요."),
+	// 기획서에 없는 문구(임시): 글에 소속이 아니거나 삭제된 팀을 연결
+	POST_TEAM_INVALID(ErrorType.BAD_REQUEST, 400, "연결할 수 없는 팀이에요. 내가 속한 팀만 고를 수 있어요."),
 	// E-53
 	NOT_FOUND(ErrorType.NOT_FOUND, 404, "찾는 내용이 없어요. 삭제됐을 수 있어요."),
 	// 기획서에 없는 문구(임시): 이미 다른 관리자가 처리한 회원
@@ -35,6 +61,14 @@ public enum ErrorCode {
 	TAG_LIMIT_EXCEEDED(ErrorType.BAD_REQUEST, 400, "태그는 5개까지 달 수 있어요."),
 	// 기획서에 없는 문구(임시): 태그 한 개가 20자 초과 (E-30은 개수 문구만 있음)
 	TAG_TOO_LONG(ErrorType.BAD_REQUEST, 400, "태그는 20자까지 쓸 수 있어요."),
+	// 필수 항목 5000자 초과 (사용자 확정 2026-10-06). 문구는 5-2-8 입력 검증 표준형 "{항목}은 {N}자까지 쓸 수 있어요."
+	POST_PROBLEM_TOO_LONG(ErrorType.BAD_REQUEST, 400, "문제는 5000자까지 쓸 수 있어요."),
+	POST_CAUSE_TOO_LONG(ErrorType.BAD_REQUEST, 400, "원인은 5000자까지 쓸 수 있어요."),
+	POST_SOLUTION_TOO_LONG(ErrorType.BAD_REQUEST, 400, "해결은 5000자까지 쓸 수 있어요."),
+	POST_DID_TOO_LONG(ErrorType.BAD_REQUEST, 400, "한 일은 5000자까지 쓸 수 있어요."),
+	POST_LEARNED_TOO_LONG(ErrorType.BAD_REQUEST, 400, "배운 점은 5000자까지 쓸 수 있어요."),
+	// 관련 커밋 링크 5개 초과 (사용자 확정 2026-10-06). E-30의 태그 개수 문구와 같은 꼴
+	POST_COMMIT_URLS_LIMIT_EXCEEDED(ErrorType.BAD_REQUEST, 400, "관련 커밋 링크는 5개까지 달 수 있어요."),
 	// EX-BD04-01
 	TITLE_REQUIRED(ErrorType.BAD_REQUEST, 400, "제목을 입력해 주세요."),
 	// E-61, EX-BD01-01
