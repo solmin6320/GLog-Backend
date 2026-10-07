@@ -229,6 +229,104 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		assertThat(row(member, week(2))).containsEntry("status", "PASS");
 	}
 
+	// ---- 가장 최근 판정 주의 미판정 회원 보충 ----
+
+	@Test
+	void 가장_최근_판정_주에_행이_없는_회원만_보충하고_확정과_보류_행은_다시_돌리지_않는다() {
+		Person confirmed = person(OLD_TEAM_JOINED);
+		Person held = person(OLD_TEAM_JOINED);
+		Person missing = person(OLD_TEAM_JOINED);
+		for (Person person : List.of(confirmed, held, missing)) {
+			storedJudgment(person, week(0), "PASS", null, 5, 0);
+		}
+		// 확정은 저장값(인증일 5)이 그대로 남아야 한다. 새로 계산하면 인증일 7이 된다
+		storedJudgment(confirmed, week(1), "PASS", null, 5, 0);
+		jdbc.update("insert into weekly_judgment (member_id, week_start, status, hold_reason, retry_count, corrected)"
+				+ " values (?, ?, 'HOLD', 'API_ERROR', 1, false)", held.id(), week(1));
+		for (Person person : List.of(confirmed, held, missing)) {
+			post(person, week(1).plusDays(2));
+		}
+		clockAt(week(2), 8, 0, 0);
+
+		Result result = catchUpFor(historyRepository, confirmed, held, missing).catchUp();
+
+		assertThat(result.judgedWeeks()).isEmpty();
+		assertThat(row(missing, week(1))).containsEntry("status", "PASS");
+		assertThat(row(confirmed, week(1)).get("verified_days")).isEqualTo(5);
+		Map<String, Object> hold = row(held, week(1));
+		assertThat(hold).containsEntry("status", "HOLD");
+		assertThat(((Number) hold.get("retry_count")).intValue()).isEqualTo(1);
+		verify(grassClient, times(1)).fetchDailyContributions(eq(missing.login()), eq(week(1)), any());
+		verify(grassClient, never()).fetchDailyContributions(eq(confirmed.login()), eq(week(1)), any());
+		verify(grassClient, never()).fetchDailyContributions(eq(held.login()), eq(week(1)), any());
+	}
+
+	@Test
+	void 보충한_회원도_그_뒤_빠진_주를_이어서_판정한다() {
+		Person confirmed = person(OLD_TEAM_JOINED);
+		Person missing = person(OLD_TEAM_JOINED);
+		storedJudgment(confirmed, week(0), "PASS", null, 5, 0);
+		storedJudgment(confirmed, week(1), "PASS", null, 5, 0);
+		storedJudgment(missing, week(0), "PASS", null, 5, 0);
+		for (Person person : List.of(confirmed, missing)) {
+			post(person, week(1).plusDays(2));
+			post(person, week(2).plusDays(2));
+		}
+		clockAt(week(3), 8, 0, 0);
+
+		List<LocalDate> judged = catchUpAll(catchUpFor(historyRepository, confirmed, missing));
+
+		assertThat(judged).containsExactly(week(2));
+		assertThat(row(missing, week(1))).containsEntry("status", "PASS");
+		assertThat(row(missing, week(2))).containsEntry("status", "PASS");
+		assertThat(row(confirmed, week(1)).get("verified_days")).isEqualTo(5);
+		assertThat(row(confirmed, week(2))).containsEntry("status", "PASS");
+		assertThat(count("weekly_judgment where member_id = ?", missing.id())).isEqualTo(3);
+	}
+
+	@Test
+	void 가장_최근_판정_주는_판정_시각이_지난_뒤에야_보충한다() {
+		Person confirmed = person(OLD_TEAM_JOINED);
+		Person missing = person(OLD_TEAM_JOINED);
+		storedJudgment(confirmed, week(0), "PASS", null, 5, 0);
+		storedJudgment(confirmed, week(1), "PASS", null, 5, 0);
+		storedJudgment(missing, week(0), "PASS", null, 5, 0);
+		post(missing, week(1).plusDays(2));
+		JudgmentCatchUpService service = catchUpFor(historyRepository, confirmed, missing);
+
+		// 진행 중인 week(1), 그리고 week(1)이 끝났어도 판정 시각 전이라 보충하지 않는다
+		clockAt(week(1).plusDays(3), 9, 0, 0);
+		service.catchUp();
+		assertThat(row(missing, week(1))).isNull();
+
+		clockAt(week(2), 6, 59, 59);
+		service.catchUp();
+		assertThat(row(missing, week(1))).isNull();
+		verifyNoInteractions(grassClient);
+
+		clockAt(week(2), 7, 0, 0);
+		service.catchUp();
+		assertThat(row(missing, week(1))).containsEntry("status", "PASS");
+	}
+
+	@Test
+	void 보충을_두_번_돌려도_판정_행이_중복되지_않는다() {
+		Person confirmed = person(OLD_TEAM_JOINED);
+		Person missing = person(OLD_TEAM_JOINED);
+		storedJudgment(confirmed, week(0), "PASS", null, 5, 0);
+		storedJudgment(confirmed, week(1), "PASS", null, 5, 0);
+		storedJudgment(missing, week(0), "PASS", null, 5, 0);
+		post(missing, week(1).plusDays(2));
+		clockAt(week(2), 8, 0, 0);
+		JudgmentCatchUpService service = catchUpFor(historyRepository, confirmed, missing);
+
+		service.catchUp();
+		service.catchUp();
+
+		assertThat(count("weekly_judgment where member_id = ? and week_start = ?", missing.id(), week(1))).isEqualTo(1);
+		verify(grassClient, times(1)).fetchDailyContributions(eq(missing.login()), eq(week(1)), any());
+	}
+
 	// ---- 여러 주 ----
 
 	@Test
