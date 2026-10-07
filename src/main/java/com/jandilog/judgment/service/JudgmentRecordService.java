@@ -61,6 +61,13 @@ public class JudgmentRecordService {
 	// snapshotTeamIds: 주 종료 시각 소속 스냅샷. 처음 저장할 때만 쓰고 보류 재실행에서는 저장된 스냅샷을 그대로 쓴다
 	@Transactional
 	public Outcome record(long memberId, LocalDate weekStart, JudgmentResult result, Set<Long> snapshotTeamIds) {
+		return record(memberId, weekStart, result, snapshotTeamIds, false);
+	}
+
+	// autoRetry: 스케줄러의 자동 재시도 결과일 때 true. 그래도 보류면 재시도 횟수를 올린다 (Q-07)
+	@Transactional
+	public Outcome record(long memberId, LocalDate weekStart, JudgmentResult result, Set<Long> snapshotTeamIds,
+			boolean autoRetry) {
 		recalculationService.lockMember(memberId);
 
 		Optional<WeeklyJudgment> existing = judgmentRepository.findByMemberIdAndWeekStart(memberId, weekStart);
@@ -73,6 +80,9 @@ public class JudgmentRecordService {
 		if (existing.isPresent()) {
 			judgment = existing.get();
 			judgment.apply(result);
+			if (autoRetry && !result.isConfirmed()) {
+				judgment.increaseRetryCount();
+			}
 			type = Type.UPDATED;
 		}
 		else {
