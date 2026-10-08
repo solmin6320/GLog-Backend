@@ -2,24 +2,24 @@
 # 팀장 전용·팀원 전용은 팀을 읽어서 검사한다(비소속·비팀장 FORBIDDEN, 없는/삭제된 팀 NOT_FOUND). 관리자도 예외 없다
 
 extend type Query {
-    "내 팀 목록 (TM-01). 참가한 순서(오래된 순). 건수 제한이 없어 페이지 없이 전부 준다. 비공개 팀도 본인에게는 실제 이름"
+    "내 팀 목록 (TM-01). 참가한 순서(오래된 순). TM-01이 페이지 대신 계속 쌓는 목록이라 커서 없이 전부 준다. 비공개 팀도 본인에게는 실제 이름"
     myTeams: [Team!]!
     "팀 기본 정보. 그 팀의 팀원·팀장만 볼 수 있다"
     team(id: ID!): Team!
-    "팀원 목록 (TM-06). 그 팀의 팀원·팀장만. 팀장이 맨 앞, 나머지는 참가한 순서"
-    teamMembers(teamId: ID!): [TeamMember!]!
+    "팀원 목록 (TM-06). 그 팀의 팀원·팀장만. 팀장이 맨 앞, 나머지는 참가한 순서. 커서 기반 20개"
+    teamMembers(teamId: ID!, "이전 페이지의 nextCursor" after: String): TeamMemberPage!
     "초대코드 다시 확인 (TM-06). 그 팀의 팀장만. 코드는 생성할 때 한 번 정해지고 재발급은 없다"
     teamInviteCode(teamId: ID!): String!
-    "받은 초대 목록 (TM-04). 최신순. 비공개 팀이어도 초대받은 당사자에게는 실제 팀 이름"
-    receivedTeamInvitations: [ReceivedTeamInvitation!]!
-    "보낸 초대 중 대기 중인 목록 (TM-06). 그 팀의 팀장만. 최신순"
-    sentTeamInvitations(teamId: ID!): [SentTeamInvitation!]!
+    "받은 초대 목록 (TM-04). 최신순, 커서 기반 20개. 비공개 팀이어도 초대받은 당사자에게는 실제 팀 이름"
+    receivedTeamInvitations("이전 페이지의 nextCursor" after: String): ReceivedTeamInvitationPage!
+    "보낸 초대 중 대기 중인 목록 (TM-06). 그 팀의 팀장만. 최신순, 커서 기반 20개"
+    sentTeamInvitations(teamId: ID!, "이전 페이지의 nextCursor" after: String): SentTeamInvitationPage!
 }
 
 extend type Mutation {
     "팀을 만든다. 만든 사람이 팀장이고, 초대코드가 이때 한 번 발급된다 (TM-02)"
     createTeam(input: CreateTeamInput!): CreateTeamPayload!
-    "팀 이름·소개·공개 설정을 고친다 (팀장만). 보낸 항목만 바뀌고, 소개는 빈 문자열이면 비워진다"
+    "팀의 공개·비공개를 바꾼다 (팀장만, TM-06 ⑦). 이름·소개 수정은 제공하지 않는다"
     updateTeam(teamId: ID!, input: UpdateTeamInput!): Team!
     """
     초대코드로 참가한다 (TM-03). 대소문자 구분 없음.
@@ -107,6 +107,24 @@ type SentTeamInvitation {
     createdAt: String!
 }
 
+type TeamMemberPage {
+    items: [TeamMember!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+type ReceivedTeamInvitationPage {
+    items: [ReceivedTeamInvitation!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+type SentTeamInvitationPage {
+    items: [SentTeamInvitation!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
 "팀 생성 결과. 초대코드는 이때 한 번 보여준다. 이후에는 팀장이 teamInviteCode로 다시 확인한다"
 type CreateTeamPayload {
     team: Team!
@@ -123,7 +141,5 @@ input CreateTeamInput {
 }
 
 input UpdateTeamInput {
-    name: String
-    description: String
-    isPublic: Boolean
+    isPublic: Boolean!
 }

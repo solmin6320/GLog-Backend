@@ -55,11 +55,6 @@ public class Team {
 		return team;
 	}
 
-	public void changeInfo(String name, String description) {
-		this.name = name;
-		this.description = description;
-	}
-
 	public void changeVisibility(boolean publicTeam) {
 		this.publicTeam = publicTeam;
 	}
