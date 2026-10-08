@@ -68,8 +68,8 @@ type Post {
     "수정 시각 (KST, ISO-8601). 수정 전에는 createdAt과 같다"
     updatedAt: String!
     commentCount: Int!
-    "오래된 순. 대댓글 없음"
-    comments: [Comment!]!
+    "댓글 목록. 오래된 순, 커서 기반 20개. 대댓글 없음"
+    comments("이전 페이지의 nextCursor" after: String): CommentPage!
 }
 
 type Comment {
@@ -80,6 +80,12 @@ type Comment {
     content: String!
     createdAt: String!
     updatedAt: String!
+}
+
+type CommentPage {
+    items: [Comment!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
 }
 
 type BoardAuthor {

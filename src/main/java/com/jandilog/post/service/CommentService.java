@@ -1,12 +1,12 @@
 package com.jandilog.post.service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +18,7 @@ import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.post.domain.Comment;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.dto.CommentResponse;
+import com.jandilog.post.dto.CursorPage;
 import com.jandilog.post.repository.CommentRepository;
 
 // 댓글 작성·수정·삭제와 글 상세의 댓글 목록 (기능명세서 3장). 1단계 댓글이고, 삭제는 작성자 본인만, 수정은 팀장도 가능
@@ -70,14 +71,16 @@ public class CommentService {
 		}
 	}
 
-	// 글 id별 댓글 목록(오래된 순)
-	public Map<ObjectId, List<CommentResponse>> findByPostIds(Collection<ObjectId> postIds) {
-		Map<ObjectId, List<CommentResponse>> byPost = new HashMap<>();
-		for (Comment comment : commentRepository.findAliveByPostIds(postIds)) {
-			byPost.computeIfAbsent(comment.getPostId(), key -> new ArrayList<>())
-					.add(CommentResponse.from(comment));
-		}
-		return byPost;
+	// 글 상세의 댓글 한 페이지: 오래된 순(작성 시각, id) 커서 20개 (Q-06)
+	public CursorPage<CommentResponse> findPage(ObjectId postId, String cursor) {
+		Cursor after = Cursor.decode(cursor);
+		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
+		List<Comment> rows = commentRepository.findAlivePageByPostId(postId, after == null ? null : after.createdAt(),
+				after == null ? null : after.id(), PostService.PAGE_SIZE + 1);
+		boolean hasNext = rows.size() > PostService.PAGE_SIZE;
+		List<Comment> page = hasNext ? rows.subList(0, PostService.PAGE_SIZE) : rows;
+		String nextCursor = hasNext ? Cursor.of(page.get(page.size() - 1)).encode() : null;
+		return new CursorPage<>(page.stream().map(CommentResponse::from).toList(), nextCursor);
 	}
 
 	public Map<ObjectId, Integer> countByPostIds(Collection<ObjectId> postIds) {
@@ -103,6 +106,37 @@ public class CommentService {
 		if (comment.getAuthorId() != memberId) {
 			throw new ApiException(ErrorCode.FORBIDDEN);
 		}
+	}
+
+	// 목록 위치. 작성 시각(epoch ms) + id 를 Base64url로 감싼다. 같은 시각 댓글은 id로 가른다
+	record Cursor(Instant createdAt, ObjectId id) {
+
+		static Cursor of(Comment comment) {
+			return new Cursor(comment.getCreatedAt(), comment.getId());
+		}
+
+		String encode() {
+			String raw = createdAt.toEpochMilli() + "|" + id.toHexString();
+			return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+		}
+
+		// 비었으면 첫 페이지(null), 형식이 틀리면 INVALID_INPUT
+		static Cursor decode(String cursor) {
+			if (cursor == null || cursor.isEmpty()) {
+				return null;
+			}
+			try {
+				String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+				String[] parts = raw.split("\\|", -1);
+				if (parts.length == 2 && ObjectId.isValid(parts[1])) {
+					return new Cursor(Instant.ofEpochMilli(Long.parseLong(parts[0])), new ObjectId(parts[1]));
+				}
+			} catch (IllegalArgumentException e) {
+				// 아래에서 같은 오류로 처리
+			}
+			throw new ApiException(ErrorCode.INVALID_INPUT);
+		}
+
 	}
 
 }

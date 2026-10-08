@@ -79,12 +79,12 @@ class PostConcurrencyIntegrationTest extends BoardIntegrationTest {
 			createdIds.add(ok(response).data().path("createComment").path("id").asText());
 		}
 		assertThat(createdIds).hasSize(count);
-		JsonNode post = ok(gql(bearerFor(author), "query($id: ID!) { post(id: $id) { commentCount comments { id content } } }",
+		JsonNode post = ok(gql(bearerFor(author), "query($id: ID!) { post(id: $id) { commentCount comments { items { id content } } } }",
 				vars("id", postId))).data().path("post");
 		assertThat(post.path("commentCount").asInt()).isEqualTo(count);
-		assertThat(post.path("comments")).hasSize(count);
+		assertThat(post.path("comments").path("items")).hasSize(count);
 		Set<String> contents = new HashSet<>();
-		post.path("comments").forEach(comment -> contents.add(comment.path("content").asText()));
+		post.path("comments").path("items").forEach(comment -> contents.add(comment.path("content").asText()));
 		assertThat(contents).hasSize(count);
 	}
 

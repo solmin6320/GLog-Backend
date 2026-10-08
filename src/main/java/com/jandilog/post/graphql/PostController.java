@@ -21,6 +21,7 @@ import com.jandilog.post.domain.PostType;
 import com.jandilog.post.dto.BoardAuthor;
 import com.jandilog.post.dto.CommentResponse;
 import com.jandilog.post.dto.CreatePostInput;
+import com.jandilog.post.dto.CursorPage;
 import com.jandilog.post.dto.PostPageResponse;
 import com.jandilog.post.dto.PostResponse;
 import com.jandilog.post.dto.TagCount;
@@ -29,7 +30,7 @@ import com.jandilog.post.service.BoardAuthorService;
 import com.jandilog.post.service.CommentService;
 import com.jandilog.post.service.PostService;
 
-// 게시판 글. 작성자·댓글 수·댓글은 목록에서도 쿼리 한 번씩만 나가도록 @BatchMapping으로 채운다 (기능명세서 10장)
+// 게시판 글. 작성자·댓글 수는 목록에서도 쿼리 한 번씩만 나가도록 @BatchMapping으로 채운다 (기능명세서 10장)
 @Controller
 public class PostController {
 
@@ -110,14 +111,10 @@ public class PostController {
 		return result;
 	}
 
-	@BatchMapping(typeName = "Post")
-	public Map<PostResponse, List<CommentResponse>> comments(List<PostResponse> posts) {
-		Map<ObjectId, List<CommentResponse>> byPost = commentService.findByPostIds(objectIds(posts));
-		Map<PostResponse, List<CommentResponse>> result = new HashMap<>();
-		for (PostResponse post : posts) {
-			result.put(post, byPost.getOrDefault(new ObjectId(post.id()), List.of()));
-		}
-		return result;
+	// after 인자를 받는 필드는 @BatchMapping을 쓸 수 없어서 글마다 한 페이지(최대 21행)만 읽는다
+	@SchemaMapping(typeName = "Post", field = "comments")
+	public CursorPage<CommentResponse> comments(PostResponse post, @Argument String after) {
+		return commentService.findPage(new ObjectId(post.id()), after);
 	}
 
 	private static List<ObjectId> objectIds(List<PostResponse> posts) {
