@@ -31,6 +31,7 @@ import com.jandilog.member.repository.MemberRepository;
 
 // 한 회원의 한 주를 판정한다 (FC-02, DB명세서 4-2): 입력 수집 → 잔디 확보 → 계산 → 저장.
 // 잔디 조회(외부 호출)는 DB 트랜잭션 밖에서 하고, 회원 락은 저장 단계(JudgmentRecordService)에서만 잡는다.
+// 조회가 길어 그 사이 면제가 승인될 수 있으니 락 안에서 면제를 다시 확인한다.
 // 이미 확정된 주는 GitHub를 부르지 않고 건너뛴다. 보류 주는 저장된 소속 스냅샷으로 다시 돈다 (E-35, E-37)
 @Service
 public class MemberJudgmentService {
@@ -86,7 +87,21 @@ public class MemberJudgmentService {
 				withoutGrass.exemptionPeriod(), withoutGrass.personalExemption(), grass, recordPosts);
 
 		JudgmentResult result = calculator.judge(input);
-		return recordService.record(memberId, weekStart, result, teamIds, autoRetry);
+		return recordService.record(memberId, weekStart, result, teamIds, autoRetry,
+				locked -> recheckExemption(memberId, input, locked));
+	}
+
+	// 회원 락을 잡은 뒤 면제를 다시 읽는다. 잔디 조회 사이에 승인·등록된 면제는 소급 면제가 닿지 못하므로(판정 행이 아직 없다)
+	// 여기서 면제 결과로 바꿔 저장한다 (기능명세서 5장 "면제 주간은 판정하지 않는다", 7장)
+	private JudgmentResult recheckExemption(long memberId, JudgmentInput input, JudgmentResult result) {
+		if (result.skipReason() != null) {
+			return result;
+		}
+		JudgmentInput latest = new JudgmentInput(input.weekStart(), input.teamIdsAtWeekEnd(), input.firstTeamJoinedAt(),
+				sourceRepository.isExemptionPeriod(input.weekStart()),
+				sourceRepository.hasApprovedPersonalExemption(memberId, input.weekStart()), input.grass(),
+				input.recordPostCounts());
+		return JudgmentCalculator.skipReason(latest) == null ? result : calculator.judge(latest);
 	}
 
 	// 잔디 확보: 오늘 캐시를 쓰고 없으면 GitHub를 한 번 부른다. 실패는 그 회원만 보류 사유로 바꾼다 (Q-09)
