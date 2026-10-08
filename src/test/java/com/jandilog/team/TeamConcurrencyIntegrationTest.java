@@ -233,7 +233,7 @@ class TeamConcurrencyIntegrationTest extends TeamIntegrationTest {
 			} else {
 				assertThat(invitationRows(team.id(), invitee)).hasSize(1);
 			}
-			assertThat(invitationService.received(invitee)).isEmpty();
+			assertThat(allReceived(invitee)).isEmpty();
 		}
 	}
 

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -27,11 +28,14 @@ import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.domain.PostType;
 import com.jandilog.post.dto.CreatePostInput;
+import com.jandilog.post.dto.CursorPage;
 import com.jandilog.post.dto.PostSectionsInput;
 import com.jandilog.post.service.PostService;
 import com.jandilog.team.dto.CreateTeamInput;
 import com.jandilog.team.dto.CreateTeamPayload;
+import com.jandilog.team.dto.ReceivedInvitationResponse;
 import com.jandilog.team.dto.SentInvitationResponse;
+import com.jandilog.team.dto.TeamMemberResponse;
 import com.jandilog.team.service.TeamBanService;
 import com.jandilog.team.service.TeamInvitationService;
 import com.jandilog.team.service.TeamJoinService;
@@ -195,6 +199,31 @@ public abstract class TeamIntegrationTest extends AuthIntegrationTest {
 		String teamId = team == null ? null : Long.toString(team.id());
 		return postService.create(authorId, new CreatePostInput(PostType.DEVLOG, "글-" + sequence.incrementAndGet(),
 				new PostSectionsInput(null, null, null, "한 일", "배운 점"), List.of(), List.of(), teamId)).id();
+	}
+
+	// ----- 목록 전체 읽기 (커서를 따라 끝까지) -----
+
+	protected List<TeamMemberResponse> allMembers(long viewerId, long teamId) {
+		return allPages(cursor -> teamService.members(viewerId, teamId, cursor));
+	}
+
+	protected List<ReceivedInvitationResponse> allReceived(long memberId) {
+		return allPages(cursor -> invitationService.received(memberId, cursor));
+	}
+
+	protected List<SentInvitationResponse> allSent(long leaderId, long teamId) {
+		return allPages(cursor -> invitationService.sent(leaderId, teamId, cursor));
+	}
+
+	private static <T> List<T> allPages(Function<String, CursorPage<T>> fetch) {
+		List<T> all = new ArrayList<>();
+		String cursor = null;
+		do {
+			CursorPage<T> page = fetch.apply(cursor);
+			all.addAll(page.items());
+			cursor = page.nextCursor();
+		} while (cursor != null);
+		return all;
 	}
 
 	// ----- 오류 단언 -----

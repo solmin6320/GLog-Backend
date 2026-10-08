@@ -106,7 +106,7 @@ class TeamBoardRosterIntegrationTest extends TeamBoardTestBase {
 		assertThat(memberIdsOf(before)).containsExactly(writer, second);
 		assertThat(titlesOf(before)).containsExactly("공개설정-" + members.tag());
 
-		teamService.update(writer, target.id(), new UpdateTeamInput(null, null, !isPublic));
+		teamService.update(writer, target.id(), new UpdateTeamInput(!isPublic));
 
 		assertThat(board(second, target.id())).isEqualTo(before);
 		assertThat(summaryOf(myTeams(second), target.id())).isEqualTo(summaryBefore);

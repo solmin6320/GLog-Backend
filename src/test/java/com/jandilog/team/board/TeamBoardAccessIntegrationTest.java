@@ -161,11 +161,11 @@ class TeamBoardAccessIntegrationTest extends TeamBoardTestBase {
 
 	@Test
 	void 팀장이_공개_설정을_바꿔도_비소속은_계속_막히고_팀원은_계속_본다() {
-		teamService.update(leader, publicTeam.id(), new UpdateTeamInput(null, null, false));
+		teamService.update(leader, publicTeam.id(), new UpdateTeamInput(false));
 		assertDenied(boardResponse(outsider, publicTeam.id()), ErrorCode.FORBIDDEN);
 		assertThat(memberIdsOf(board(mate, publicTeam.id()))).containsExactly(leader, mate);
 
-		teamService.update(leader, publicTeam.id(), new UpdateTeamInput(null, null, true));
+		teamService.update(leader, publicTeam.id(), new UpdateTeamInput(true));
 		assertDenied(boardResponse(outsider, publicTeam.id()), ErrorCode.FORBIDDEN);
 		assertThat(memberIdsOf(board(mate, publicTeam.id()))).containsExactly(leader, mate);
 	}

@@ -165,9 +165,9 @@ class TeamLeaveTransferIntegrationTest extends TeamIntegrationTest {
 		assertThat(isActiveMember(team.id(), leader)).isTrue();
 		assertThat(teamService.get(successor, team.id()).isLeader()).isTrue();
 		assertThat(teamService.get(leader, team.id()).isLeader()).isFalse();
-		assertThat(teamService.members(successor, team.id())).extracting(TeamMemberResponse::id)
+		assertThat(allMembers(successor, team.id())).extracting(TeamMemberResponse::id)
 				.containsExactly(successor, leader);
-		assertThat(teamService.members(successor, team.id())).extracting(TeamMemberResponse::isLeader)
+		assertThat(allMembers(successor, team.id())).extracting(TeamMemberResponse::isLeader)
 				.containsExactly(true, false);
 	}
 
@@ -181,10 +181,10 @@ class TeamLeaveTransferIntegrationTest extends TeamIntegrationTest {
 		leaveService.transferLeadership(leader, team.id(), successor);
 
 		assertApiError(() -> teamService.inviteCode(leader, team.id()), ErrorCode.FORBIDDEN);
-		assertApiError(() -> teamService.update(leader, team.id(), new UpdateTeamInput("이전 팀장 수정", null, null)),
+		assertApiError(() -> teamService.update(leader, team.id(), new UpdateTeamInput(false)),
 				ErrorCode.FORBIDDEN);
 		assertApiError(() -> invitationService.invite(leader, team.id(), loginOf(invitee)), ErrorCode.FORBIDDEN);
-		assertApiError(() -> invitationService.sent(leader, team.id()), ErrorCode.FORBIDDEN);
+		assertApiError(() -> allSent(leader, team.id()), ErrorCode.FORBIDDEN);
 		assertApiError(() -> leaveService.kick(leader, team.id(), target), ErrorCode.FORBIDDEN);
 		assertApiError(() -> leaveService.delete(leader, team.id()), ErrorCode.FORBIDDEN);
 		// 되돌릴 방법이 없다: 이전 팀장이 다시 자기를 지정할 수 없다
@@ -192,12 +192,11 @@ class TeamLeaveTransferIntegrationTest extends TeamIntegrationTest {
 		assertApiError(() -> leaveService.transferLeadership(leader, team.id(), successor), ErrorCode.FORBIDDEN);
 
 		assertThat(teamService.inviteCode(successor, team.id())).isEqualTo(team.inviteCode());
-		assertThat(teamService.update(successor, team.id(), new UpdateTeamInput("새 팀장 수정", null, null)).name())
-				.isEqualTo("새 팀장 수정");
+		assertThat(teamService.update(successor, team.id(), new UpdateTeamInput(false)).isPublic()).isFalse();
 		SentInvitationResponse sent = invitationService.invite(successor, team.id(), loginOf(invitee));
-		assertThat(invitationService.sent(successor, team.id())).extracting(SentInvitationResponse::id).containsExactly(sent.id());
+		assertThat(allSent(successor, team.id())).extracting(SentInvitationResponse::id).containsExactly(sent.id());
 		leaveService.kick(successor, team.id(), target);
-		assertThat(teamRow(team.id()).get("name")).isEqualTo("새 팀장 수정");
+		assertThat(teamRow(team.id()).get("is_public")).isIn(false, 0);
 		assertThat(isActiveMember(team.id(), target)).isFalse();
 	}
 
@@ -272,7 +271,7 @@ class TeamLeaveTransferIntegrationTest extends TeamIntegrationTest {
 		leaveService.transferLeadership(second, team.id(), third);
 
 		assertThat(((Number) teamRow(team.id()).get("leader_id")).longValue()).isEqualTo(third);
-		assertThat(teamService.members(first, team.id())).extracting(TeamMemberResponse::id).first().isEqualTo(third);
+		assertThat(allMembers(first, team.id())).extracting(TeamMemberResponse::id).first().isEqualTo(third);
 	}
 
 	// ----- GraphQL -----

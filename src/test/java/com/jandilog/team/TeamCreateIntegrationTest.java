@@ -80,9 +80,9 @@ class TeamCreateIntegrationTest extends TeamIntegrationTest {
 		CreatedTeam team = newTeam(leader);
 
 		String first = teamService.inviteCode(leader, team.id());
-		// 참가자·정보 수정이 있어도 처음 발급된 코드 그대로다 (재발급 없음)
+		// 참가자·공개 설정 변경이 있어도 처음 발급된 코드 그대로다 (재발급 없음)
 		joinedMember(team);
-		teamService.update(leader, team.id(), new UpdateTeamInput("새 이름", null, false));
+		teamService.update(leader, team.id(), new UpdateTeamInput(false));
 		String second = teamService.inviteCode(leader, team.id());
 
 		assertThat(first).isEqualTo(team.inviteCode());
@@ -218,7 +218,7 @@ class TeamCreateIntegrationTest extends TeamIntegrationTest {
 		clock.fixAt(Instant.parse("2026-09-03T00:00:00Z"));
 		long third = joinedMember(team);
 
-		List<TeamMemberResponse> members = teamService.members(second, team.id());
+		List<TeamMemberResponse> members = allMembers(second, team.id());
 
 		assertThat(members).extracting(TeamMemberResponse::id).containsExactly(leader, second, third);
 		assertThat(members).extracting(TeamMemberResponse::isLeader).containsExactly(true, false, false);

@@ -171,7 +171,7 @@ class TeamJoinByCodeIntegrationTest extends TeamIntegrationTest {
 		long second = joinedMember(team);
 
 		assertThat(teamService.get(leader, team.id()).memberCount()).isEqualTo(3);
-		assertThat(teamService.members(first, team.id())).extracting(m -> m.id()).containsExactlyInAnyOrder(leader, first, second);
+		assertThat(allMembers(first, team.id())).extracting(m -> m.id()).containsExactlyInAnyOrder(leader, first, second);
 	}
 
 	// ----- GraphQL -----

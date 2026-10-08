@@ -99,10 +99,10 @@ class TeamDeleteIntegrationTest extends TeamIntegrationTest {
 
 		for (long viewer : new long[] {leader, teammate}) {
 			assertApiError(() -> teamService.get(viewer, team.id()), ErrorCode.NOT_FOUND);
-			assertApiError(() -> teamService.members(viewer, team.id()), ErrorCode.NOT_FOUND);
+			assertApiError(() -> allMembers(viewer, team.id()), ErrorCode.NOT_FOUND);
 			assertApiError(() -> teamService.inviteCode(viewer, team.id()), ErrorCode.NOT_FOUND);
-			assertApiError(() -> invitationService.sent(viewer, team.id()), ErrorCode.NOT_FOUND);
-			assertApiError(() -> teamService.update(viewer, team.id(), new UpdateTeamInput("이름", null, null)),
+			assertApiError(() -> allSent(viewer, team.id()), ErrorCode.NOT_FOUND);
+			assertApiError(() -> teamService.update(viewer, team.id(), new UpdateTeamInput(false)),
 					ErrorCode.NOT_FOUND);
 			assertApiError(() -> invitationService.invite(viewer, team.id(), loginOf(invitee)), ErrorCode.NOT_FOUND);
 			assertApiError(() -> leaveService.kick(viewer, team.id(), teammate), ErrorCode.NOT_FOUND);
