@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,12 +69,21 @@ public class JudgmentRecordService {
 	@Transactional
 	public Outcome record(long memberId, LocalDate weekStart, JudgmentResult result, Set<Long> snapshotTeamIds,
 			boolean autoRetry) {
+		return record(memberId, weekStart, result, snapshotTeamIds, autoRetry, UnaryOperator.identity());
+	}
+
+	// recheckUnderLock: 회원 락을 잡은 뒤 저장 직전에 계산 결과를 다시 확인하는 훅. 잔디 조회처럼 락 밖에서 오래 걸린 계산의
+	// 입력이 그 사이에 바뀌었는지(면제 승인 등) 락 안에서 다시 읽어 결과를 바꿀 수 있다. 확정된 주는 훅을 부르지 않고 건너뛴다
+	@Transactional
+	public Outcome record(long memberId, LocalDate weekStart, JudgmentResult computed, Set<Long> snapshotTeamIds,
+			boolean autoRetry, UnaryOperator<JudgmentResult> recheckUnderLock) {
 		recalculationService.lockMember(memberId);
 
 		Optional<WeeklyJudgment> existing = judgmentRepository.findByMemberIdAndWeekStart(memberId, weekStart);
 		if (existing.isPresent() && existing.get().isConfirmed()) {
 			return new Outcome(Type.SKIPPED_CONFIRMED, existing.get());
 		}
+		JudgmentResult result = recheckUnderLock.apply(computed);
 
 		WeeklyJudgment judgment;
 		Type type;
