@@ -27,7 +27,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 			  post(id: $id) {
 			    id
 			    commentCount
-			    comments { id postId authorId content createdAt updatedAt author { id nickname profileImageUrl } }
+			    comments { nextCursor items { id postId authorId content createdAt updatedAt author { id nickname profileImageUrl } } }
 			  }
 			}
 			""";
@@ -91,7 +91,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 		clock.reset();
 		JsonNode created = ok(comment(commenter, postId, "시각 확인")).data().path("createComment");
 
-		JsonNode read = detail(postId).path("comments").get(0);
+		JsonNode read = detail(postId).path("comments").path("items").get(0);
 
 		assertThat(read.path("createdAt").asText()).isEqualTo(created.path("createdAt").asText());
 		assertThat(read.path("updatedAt").asText()).isEqualTo(created.path("updatedAt").asText());
@@ -187,8 +187,8 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 		JsonNode post = detail(postId);
 
 		assertThat(post.path("commentCount").asInt()).isEqualTo(3);
-		assertThat(post.path("comments")).extracting(c -> c.path("id").asText()).containsExactly(first, second, third);
-		assertThat(post.path("comments")).extracting(c -> c.path("content").asText())
+		assertThat(post.path("comments").path("items")).extracting(c -> c.path("id").asText()).containsExactly(first, second, third);
+		assertThat(post.path("comments").path("items")).extracting(c -> c.path("content").asText())
 				.containsExactly("첫 댓글", "둘째 댓글", "셋째 댓글");
 	}
 
@@ -199,7 +199,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 		clock.fixAt(T0.plusSeconds(1));
 		newComment(other, postId, "B의 댓글");
 
-		JsonNode comments = detail(postId).path("comments");
+		JsonNode comments = detail(postId).path("comments").path("items");
 
 		assertThat(comments.get(0).path("author").path("id").asText()).isEqualTo(Long.toString(commenter));
 		assertThat(comments.get(1).path("author").path("id").asText()).isEqualTo(Long.toString(other));
@@ -211,7 +211,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 	void 댓글이_없는_글은_빈_목록과_0이다() {
 		JsonNode post = detail(postId);
 
-		assertThat(post.path("comments")).isEmpty();
+		assertThat(post.path("comments").path("items")).isEmpty();
 		assertThat(post.path("commentCount").asInt()).isZero();
 	}
 
@@ -226,7 +226,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 		JsonNode post = detail(postId);
 
 		assertThat(post.path("commentCount").asInt()).isEqualTo(1);
-		assertThat(post.path("comments")).extracting(c -> c.path("id").asText()).containsExactly(keep);
+		assertThat(post.path("comments").path("items")).extracting(c -> c.path("id").asText()).containsExactly(keep);
 	}
 
 	@Test
@@ -279,7 +279,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 		assertThat(updated.path("authorId").asText()).isEqualTo(Long.toString(commenter));
 		assertThat(updated.path("postId").asText()).isEqualTo(postId);
 		assertThat(mongoComment(id).getString("content")).isEqualTo("고친 댓글");
-		assertThat(detail(postId).path("comments").get(0).path("content").asText()).isEqualTo("고친 댓글");
+		assertThat(detail(postId).path("comments").path("items").get(0).path("content").asText()).isEqualTo("고친 댓글");
 	}
 
 	@Test
@@ -381,7 +381,7 @@ class CommentIntegrationTest extends BoardIntegrationTest {
 
 		ok(remove(commenter, gone));
 
-		assertThat(detail(postId).path("comments")).extracting(c -> c.path("id").asText()).containsExactly(keep);
+		assertThat(detail(postId).path("comments").path("items")).extracting(c -> c.path("id").asText()).containsExactly(keep);
 		assertThat(mongoComment(gone).get("deletedAt")).isNotNull();
 	}
 
