@@ -11,6 +11,7 @@ import org.springframework.stereotype.Controller;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.security.AuthenticatedMember;
+import com.jandilog.post.dto.CursorPage;
 import com.jandilog.team.dto.CreateTeamInput;
 import com.jandilog.team.dto.CreateTeamPayload;
 import com.jandilog.team.dto.ReceivedInvitationResponse;
@@ -57,9 +58,9 @@ public class TeamController {
 
 	@QueryMapping
 	@PreAuthorize("hasRole('MEMBER')")
-	public List<TeamMemberResponse> teamMembers(@AuthenticationPrincipal AuthenticatedMember member,
-			@Argument String teamId) {
-		return teamService.members(member.id(), TeamAccessService.parseTeamId(teamId));
+	public CursorPage<TeamMemberResponse> teamMembers(@AuthenticationPrincipal AuthenticatedMember member,
+			@Argument String teamId, @Argument String after) {
+		return teamService.members(member.id(), TeamAccessService.parseTeamId(teamId), after);
 	}
 
 	@QueryMapping
@@ -70,16 +71,16 @@ public class TeamController {
 
 	@QueryMapping
 	@PreAuthorize("hasRole('MEMBER')")
-	public List<ReceivedInvitationResponse> receivedTeamInvitations(
-			@AuthenticationPrincipal AuthenticatedMember member) {
-		return invitationService.received(member.id());
+	public CursorPage<ReceivedInvitationResponse> receivedTeamInvitations(
+			@AuthenticationPrincipal AuthenticatedMember member, @Argument String after) {
+		return invitationService.received(member.id(), after);
 	}
 
 	@QueryMapping
 	@PreAuthorize("hasRole('MEMBER')")
-	public List<SentInvitationResponse> sentTeamInvitations(@AuthenticationPrincipal AuthenticatedMember member,
-			@Argument String teamId) {
-		return invitationService.sent(member.id(), TeamAccessService.parseTeamId(teamId));
+	public CursorPage<SentInvitationResponse> sentTeamInvitations(@AuthenticationPrincipal AuthenticatedMember member,
+			@Argument String teamId, @Argument String after) {
+		return invitationService.sent(member.id(), TeamAccessService.parseTeamId(teamId), after);
 	}
 
 	@MutationMapping
