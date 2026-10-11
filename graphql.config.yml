@@ -1,0 +1,2 @@
+# IDE GraphQL 플러그인이 읽을 스키마 범위. 워크트리·build 사본이 섞이지 않게 실제 스키마 폴더만 지정한다
+schema: src/main/resources/graphql/*.graphqls
