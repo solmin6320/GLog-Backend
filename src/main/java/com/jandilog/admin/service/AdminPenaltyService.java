@@ -20,6 +20,7 @@ import com.jandilog.admin.dto.AdminWarningTeam;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.common.time.KstFormats;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.member.domain.Member;
@@ -69,21 +70,19 @@ public class AdminPenaltyService {
 		List<Target> all = targetService.findTargets();
 		CursorKey after = CursorKey.decode(cursor);
 		List<Target> rest = after == null ? all : all.stream().filter(target -> after.isBefore(target)).toList();
-		boolean hasNext = rest.size() > CursorCodec.PAGE_SIZE;
-		List<Target> page = hasNext ? rest.subList(0, CursorCodec.PAGE_SIZE) : rest;
-		String nextCursor = hasNext ? CursorKey.encode(page.get(page.size() - 1)) : null;
+		PageSlice<Target> page = PageSlice.of(rest, CursorKey::encode);
 
-		Map<Long, Member> members = memberRepository.findAllById(page.stream().map(Target::memberId).toList())
+		Map<Long, Member> members = memberRepository.findAllById(page.rows().stream().map(Target::memberId).toList())
 				.stream().collect(Collectors.toMap(Member::getId, Function.identity()));
 		List<AdminPenaltyTarget> items = new ArrayList<>();
-		for (Target target : page) {
+		for (Target target : page.rows()) {
 			Member member = members.get(target.memberId());
 			if (member != null) {
 				items.add(new AdminPenaltyTarget(MemberBrief.from(member), target.warningCount(),
 						target.reachedWeek().toString(), teamsOf(target.memberId())));
 			}
 		}
-		return new AdminPenaltyTargetPage(items, nextCursor, all.size());
+		return new AdminPenaltyTargetPage(items, page.nextCursor(), all.size());
 	}
 
 	// 이행 체크: 경고 0 · 연속 통과 0이 되고 되돌릴 수 없다. 벌칙 대상이 아니면 NOT_PENALTY_TARGET

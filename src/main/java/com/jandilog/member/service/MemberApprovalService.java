@@ -1,9 +1,7 @@
 package com.jandilog.member.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
@@ -16,6 +14,8 @@ import com.jandilog.admin.domain.AdminActionType;
 import com.jandilog.admin.repository.AdminActionLogRepository;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.member.domain.Member;
 import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.member.dto.AdminMemberPage;
@@ -27,7 +27,7 @@ import com.jandilog.member.repository.MemberRepository;
 @Service
 public class MemberApprovalService {
 
-	static final int PAGE_SIZE = 20;
+	static final int PAGE_SIZE = CursorCodec.PAGE_SIZE;
 	private static final int KEYWORD_MAX_LENGTH = 50;
 	private static final char LIKE_ESCAPE = '!';
 	private static final String TARGET_TYPE_MEMBER = "MEMBER";
@@ -53,12 +53,11 @@ public class MemberApprovalService {
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 		List<Member> rows = memberRepository.findApprovalPage(statuses, pattern, afterId,
 				PageRequest.of(0, PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > PAGE_SIZE;
-		List<Member> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getId()) : null;
+		PageSlice<Member> page = PageSlice.of(rows, last -> encodeCursor(last.getId()));
 
 		int totalCount = (int) memberRepository.countApproval(statuses, pattern);
-		return new AdminMemberPage(page.stream().map(AdminMemberResponse::from).toList(), nextCursor, totalCount);
+		return new AdminMemberPage(page.rows().stream().map(AdminMemberResponse::from).toList(), page.nextCursor(),
+				totalCount);
 	}
 
 	// 승인 대기 → 활성, 승인 시각 기록
@@ -128,22 +127,16 @@ public class MemberApprovalService {
 	}
 
 	static String encodeCursor(long lastId) {
-		return Base64.getUrlEncoder().withoutPadding().encodeToString(Long.toString(lastId).getBytes(StandardCharsets.UTF_8));
+		return CursorCodec.encode(lastId);
 	}
 
+	// 커서가 없으면 0, 형식이 틀리거나 음수면 잘못된 입력
 	static long decodeCursor(String cursor) {
-		if (cursor == null || cursor.isEmpty()) {
-			return 0L;
+		long id = CursorCodec.decodeLong(cursor, 0L);
+		if (id < 0) {
+			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
-		try {
-			long id = Long.parseLong(new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
-			if (id >= 0) {
-				return id;
-			}
-		} catch (IllegalArgumentException e) {
-			// 아래에서 같은 오류로 처리
-		}
-		throw new ApiException(ErrorCode.INVALID_INPUT);
+		return id;
 	}
 
 }
