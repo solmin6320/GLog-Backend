@@ -1,10 +1,8 @@
 package com.jandilog.post.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -15,6 +13,8 @@ import org.springframework.stereotype.Service;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.post.domain.Comment;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.dto.CommentResponse;
@@ -77,10 +77,8 @@ public class CommentService {
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 		List<Comment> rows = commentRepository.findAlivePageByPostId(postId, after == null ? null : after.createdAt(),
 				after == null ? null : after.id(), PostService.PAGE_SIZE + 1);
-		boolean hasNext = rows.size() > PostService.PAGE_SIZE;
-		List<Comment> page = hasNext ? rows.subList(0, PostService.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? Cursor.of(page.get(page.size() - 1)).encode() : null;
-		return new CursorPage<>(page.stream().map(CommentResponse::from).toList(), nextCursor);
+		PageSlice<Comment> page = PageSlice.of(rows, last -> Cursor.of(last).encode());
+		return new CursorPage<>(page.rows().stream().map(CommentResponse::from).toList(), page.nextCursor());
 	}
 
 	public Map<ObjectId, Integer> countByPostIds(Collection<ObjectId> postIds) {
@@ -116,22 +114,21 @@ public class CommentService {
 		}
 
 		String encode() {
-			String raw = createdAt.toEpochMilli() + "|" + id.toHexString();
-			return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+			return CursorCodec.encode(createdAt.toEpochMilli() + "|" + id.toHexString());
 		}
 
 		// 비었으면 첫 페이지(null), 형식이 틀리면 INVALID_INPUT
 		static Cursor decode(String cursor) {
-			if (cursor == null || cursor.isEmpty()) {
+			String raw = CursorCodec.decode(cursor);
+			if (raw == null) {
 				return null;
 			}
+			String[] parts = raw.split("\\|", -1);
 			try {
-				String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-				String[] parts = raw.split("\\|", -1);
 				if (parts.length == 2 && ObjectId.isValid(parts[1])) {
 					return new Cursor(Instant.ofEpochMilli(Long.parseLong(parts[0])), new ObjectId(parts[1]));
 				}
-			} catch (IllegalArgumentException e) {
+			} catch (NumberFormatException e) {
 				// 아래에서 같은 오류로 처리
 			}
 			throw new ApiException(ErrorCode.INVALID_INPUT);
