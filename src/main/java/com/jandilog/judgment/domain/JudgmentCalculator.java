@@ -23,11 +23,7 @@ public final class JudgmentCalculator {
 
 	public JudgmentResult judge(JudgmentInput input) {
 		LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
-		LocalDate weekStart = input.weekStart();
-		// 끝나지 않은 주를 판정하면 아직 채울 수 있는 주에 경고가 붙는다
-		if (now.isBefore(JudgmentWeek.endExclusive(weekStart))) {
-			throw new IllegalStateException("아직 끝나지 않은 주차는 판정할 수 없어요: " + weekStart);
-		}
+		requireWeekEnded(now, input.weekStart());
 
 		SkipReason skip = skipReason(input);
 		if (skip != null) {
@@ -41,12 +37,23 @@ public final class JudgmentCalculator {
 		if (grass.isFailed()) {
 			return JudgmentResult.hold(grass.failure());
 		}
+		return judgeWeek(input, grass, now);
+	}
 
+	// 끝나지 않은 주를 판정하면 아직 채울 수 있는 주에 경고가 붙는다
+	private static void requireWeekEnded(LocalDateTime now, LocalDate weekStart) {
+		if (now.isBefore(JudgmentWeek.endExclusive(weekStart))) {
+			throw new IllegalStateException("아직 끝나지 않은 주차는 판정할 수 없어요: " + weekStart);
+		}
+	}
+
+	// 월~일 7일의 일자별 결과를 모아 인증일 수·기록글 수로 통과 여부를 정한다
+	private static JudgmentResult judgeWeek(JudgmentInput input, GrassLookup grass, LocalDateTime now) {
 		List<DayResult> days = new ArrayList<>(7);
 		int verifiedDays = 0;
 		int recordCount = 0;
 		for (int i = 0; i < 7; i++) {
-			LocalDate day = weekStart.plusDays(i);
+			LocalDate day = input.weekStart().plusDays(i);
 			Boolean hasGrass = grass.hasGrassByDay().get(day);
 			// 없는 날을 잔디 0칸으로 보면 조회가 덜 된 주가 미달 처리된다
 			if (hasGrass == null) {
