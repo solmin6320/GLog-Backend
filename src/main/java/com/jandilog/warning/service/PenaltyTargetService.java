@@ -2,6 +2,7 @@ package com.jandilog.warning.service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class PenaltyTargetService {
 		this.recalculationService = recalculationService;
 	}
 
+	// 도달한 주가 오래된 순, 같으면 회원 id 순
 	@Transactional(readOnly = true)
 	public List<Target> findTargets() {
 		List<Target> targets = new ArrayList<>();
@@ -38,7 +40,7 @@ public class PenaltyTargetService {
 				targets.add(new Target(memberId, state.warningCount(), state.penaltyReachedWeek()));
 			}
 		}
-		targets.sort((a, b) -> a.reachedWeek().compareTo(b.reachedWeek()));
+		targets.sort(Comparator.comparing(Target::reachedWeek).thenComparingLong(Target::memberId));
 		return targets;
 	}
 

@@ -1,0 +1,378 @@
+# 관리자 (기능명세서 9장). 웹 전용, 관리자 권한은 대메뉴 6개(대시보드 · 경고 복구·벌칙 · 가입 승인 · 면제 관리 · 공지 관리 · 게시물 관리) 안에서만.
+# 가입 승인은 member-approval, 면제 관리는 exemption, 공지 관리는 notice 스키마에 있다
+
+extend type Query {
+    """
+    판정 정정 재계산 미리보기 (대시보드 정정 패널, E-49 · E-50 · E-58). 계산만 하고 아무것도 바꾸지 않는다.
+    정정할 수 없는 판정(보류, 같은 결과, 제외를 면제가 아닌 결과로)은 JUDGMENT_NOT_CORRECTABLE
+    """
+    previewJudgmentCorrection(judgmentId: ID!, status: AdminCorrectionStatus!): JudgmentCorrectionPreview!
+}
+
+extend type Mutation {
+    """
+    판정을 정정하고 경고를 다시 계산한다 (관리자). 결과는 통과·미달·면제 셋뿐이고 사유는 필수(1~500자).
+    제외(첫 참가·팀 없음) 판정은 면제로만 정정한다. 이력과 관리자 행동 로그가 남는다.
+    expectedStatus가 지금 판정과 다르면 JUDGMENT_CHANGED
+    """
+    correctJudgment(input: JudgmentCorrectionInput!): CorrectedJudgment!
+}
+
+"이름 · GitHub 아이디 (관리자 목록에 붙는 회원 표시)"
+type AdminMemberBrief {
+    id: ID!
+    nickname: String!
+    githubLogin: String!
+}
+
+enum AdminJudgmentStatus {
+    PASS
+    FAIL
+    EXEMPT
+    "첫 참가 주 · 팀 없음"
+    EXCLUDED
+    "GitHub 조회 실패로 아직 확정하지 못함"
+    HOLD
+}
+
+"정정으로 만들 수 있는 결과 (Q-05)"
+enum AdminCorrectionStatus {
+    PASS
+    FAIL
+    EXEMPT
+}
+
+"""
+정정 · 소급 면제 · 경고 복구의 재계산 영향.
+onHold면 보류 중인 주가 있어 경고 수를 비교하지 않는다(null). recordOnly면 벌칙 이행 이전 주라 기록만 바뀌고 경고 수는 그대로다 (E-58 · E-59)
+"""
+type AdminRecalcImpact {
+    onHold: Boolean!
+    warningCountBefore: Int
+    warningCountAfter: Int
+    "벌칙 대상에 새로 들어간다 (E-42)"
+    entersPenalty: Boolean!
+    "벌칙 대상에서 빠진다 (E-50)"
+    leavesPenalty: Boolean!
+    recordOnly: Boolean!
+    "그 주 이후 다시 계산되는 판정 수"
+    affectedWeeks: Int!
+}
+
+input JudgmentCorrectionInput {
+    judgmentId: ID!
+    status: AdminCorrectionStatus!
+    "필수, 1~500자"
+    reason: String!
+    "미리보기 때 본 현재 결과. 다르면 JUDGMENT_CHANGED"
+    expectedStatus: AdminJudgmentStatus
+}
+
+type JudgmentCorrectionPreview {
+    judgmentId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    currentStatus: AdminJudgmentStatus!
+    targetStatus: AdminJudgmentStatus!
+    impact: AdminRecalcImpact!
+}
+
+"정정 반영 뒤의 판정과 그 회원의 경고 상태. warningCount는 보류 주가 남아 있으면 null"
+type CorrectedJudgment {
+    judgmentId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    status: AdminJudgmentStatus!
+    onHold: Boolean!
+    warningCount: Int
+    penaltyTarget: Boolean!
+}
+
+# ---- 대시보드 (AD-01 ⑤~⑨) ----
+
+extend type Query {
+    "처리 대기 요약 (AD-01 ⑤). 메뉴 배지도 같은 값을 쓴다"
+    adminDashboardSummary: AdminDashboardSummary!
+    """
+    주차별 판정 결과 (AD-01 ⑥⑦⑧). weekStart를 생략하면 직전 주(이번 월요일 판정의 대상), 월요일이 아니면 INVALID_INPUT.
+    keyword는 닉네임·GitHub 아이디 부분 일치(50자 이하). 집계는 검색·필터와 무관한 그 주 전체 값이고 팀 이름은 싣지 않는다
+    """
+    adminJudgments(
+        weekStart: String
+        keyword: String
+        filter: AdminJudgmentFilter = ALL
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminJudgmentPage!
+    "보류 목록 (AD-01 ⑨). 사람이 처리해야 하는 보류만 오래된 순 커서 기반 20개. totalCount가 0이면 보류 표시를 그리지 않는다"
+    adminJudgmentHolds(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminHoldPage!
+}
+
+extend type Mutation {
+    "보류 한 건을 다시 판정한다 (관리자). 이미 확정된 건은 건너뛰고 현재 결과를 돌려준다. 판정 행이 없으면 NOT_FOUND"
+    retryJudgmentHold(memberId: ID!, weekStart: String!): AdminHoldRetryResult!
+    "사람이 처리해야 하는 보류 건만 모두 다시 판정한다 (관리자, E-35). 확정된 건은 건드리지 않는다"
+    retryAllJudgmentHolds: AdminHoldRerunSummary!
+}
+
+enum AdminJudgmentFilter {
+    ALL
+    FAIL_ONLY
+    HOLD_ONLY
+}
+
+"판정에서 빠진 이유. NO_TEAM · FIRST_WEEK은 제외, EXEMPTION_PERIOD · PERSONAL_EXEMPTION은 면제"
+enum AdminSkipReason {
+    NO_TEAM
+    FIRST_WEEK
+    EXEMPTION_PERIOD
+    PERSONAL_EXEMPTION
+}
+
+"보류 이유. API_ERROR는 재시도로 풀리고 IDENTITY_MISMATCH는 본인이 다시 로그인해야 풀린다 (E-08)"
+enum AdminHoldReason {
+    API_ERROR
+    IDENTITY_MISMATCH
+}
+
+type AdminDashboardSummary {
+    "이번 주 미달이 세는 판정 주 월요일 (직전 주)"
+    judgedWeekStart: String!
+    pendingMembers: Int!
+    "judgedWeekStart의 미달 판정 수"
+    failedMembers: Int!
+    penaltyTargets: Int!
+    pendingExemptions: Int!
+}
+
+"판정 결과 한 행. warningCount는 보류 주가 남은 회원이면 null. manualHold는 사람이 처리해야 하는 보류"
+type AdminJudgmentRow {
+    judgmentId: ID!
+    member: AdminMemberBrief!
+    status: AdminJudgmentStatus!
+    skipReason: AdminSkipReason
+    holdReason: AdminHoldReason
+    verifiedDays: Int
+    recordCount: Int
+    warningCount: Int
+    corrected: Boolean!
+    manualHold: Boolean!
+}
+
+"""
+한 주의 집계와 회원별 결과. executedAt은 그 주 판정이 확정된 마지막 시각(KST, 없으면 null).
+holdCount는 사람이 처리해야 하는 보류만 센다
+"""
+type AdminJudgmentPage {
+    weekStart: String!
+    weekEnd: String!
+    executedAt: String
+    passCount: Int!
+    failCount: Int!
+    exemptCount: Int!
+    firstWeekCount: Int!
+    holdCount: Int!
+    items: [AdminJudgmentRow!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+type AdminHold {
+    member: AdminMemberBrief!
+    weekStart: String!
+    reason: AdminHoldReason!
+    retryCount: Int!
+    "자동 재시도 3회를 다 썼는가"
+    retriesExhausted: Boolean!
+}
+
+type AdminHoldPage {
+    items: [AdminHold!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+    totalCount: Int!
+    "그중 본인이 다시 로그인해야 풀리는 건수"
+    identityMismatchCount: Int!
+}
+
+type AdminHoldRetryResult {
+    member: AdminMemberBrief!
+    weekStart: String!
+    status: AdminJudgmentStatus!
+    holdReason: AdminHoldReason
+    "이번 재시도로 보류가 풀려 확정됐는가"
+    resolved: Boolean!
+}
+
+type AdminHoldRerunSummary {
+    attempted: Int!
+    resolved: Int!
+    stillHold: Int!
+    failed: Int!
+}
+
+# ---- 경고 복구 · 벌칙 (AD-01 `warnings`, 기능명세서 6·9장) ----
+
+extend type Query {
+    "벌칙 대상 목록 (경고 3개 이상). 도달한 주가 오래된 순 커서 기반 20명. 이 화면에서만 비공개 팀도 실명으로 보인다"
+    adminPenaltyTargets(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminPenaltyTargetPage!
+    """
+    삭제 표시된 경고 목록 (추방 · 팀 삭제). 삭제가 최근인 순 커서 기반 20개.
+    정정 · 소급 면제로 미달이 아니게 된 주의 경고는 나오지 않는다
+    """
+    adminDeletedWarnings(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminDeletedWarningPage!
+    """
+    경고를 복구하면 바뀌는 수치 미리보기 (E-42 · E-43 · E-59). 계산만 하고 아무것도 바꾸지 않는다.
+    삭제된 경고가 아니면 ALREADY_HANDLED, 복구 대상이 아니면 NOT_FOUND
+    """
+    previewWarningRestore(warningId: ID!): AdminWarningRestorePreview!
+}
+
+extend type Mutation {
+    """
+    벌칙 이행을 체크한다 (관리자). 경고 0 · 연속 통과 0이 되고 되돌릴 수 없는 고정점이 된다 (E-58).
+    벌칙 대상이 아니면 NOT_PENALTY_TARGET. 관리자 행동 로그가 남는다
+    """
+    fulfillPenalty(memberId: ID!): AdminPenaltyFulfillment!
+    """
+    삭제된 경고를 복구한다 (관리자). 삭제 표시를 풀고 아직 있는 팀의 카테고리를 되살린 뒤 경고를 다시 계산한다.
+    벌칙 이행 이전 주의 경고는 기록만 되살아난다 (E-59). 이미 복구됐으면 ALREADY_HANDLED. 관리자 행동 로그가 남는다
+    """
+    restoreWarning(warningId: ID!): AdminRestoredWarning!
+}
+
+"경고에 붙은 팀. 이 화면에서는 비공개 팀도 실명이다"
+type AdminWarningTeam {
+    id: ID!
+    name: String!
+}
+
+type AdminPenaltyTarget {
+    member: AdminMemberBrief!
+    "3을 넘을 수 있다"
+    warningCount: Int!
+    "경고가 3개에 도달한 주 월요일"
+    reachedWeek: String!
+    teams: [AdminWarningTeam!]!
+}
+
+type AdminPenaltyTargetPage {
+    items: [AdminPenaltyTarget!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+    totalCount: Int!
+}
+
+type AdminPenaltyFulfillment {
+    member: AdminMemberBrief!
+    "이행 체크 시각 (KST, ISO-8601)"
+    fulfilledAt: String!
+    reachedWeek: String!
+}
+
+enum AdminWarningDeleteReason {
+    KICKED
+    TEAM_DELETED
+}
+
+"restoreTeams는 복구하면 되살아나는 카테고리. teamDeleted면 그런 팀이 없어 '삭제된 팀'으로 표시된다 (E-43)"
+type AdminDeletedWarning {
+    warningId: ID!
+    member: AdminMemberBrief!
+    "경고를 받은 주 월요일"
+    weekStart: String!
+    deleteReason: AdminWarningDeleteReason!
+    deletedAt: String!
+    restoreTeams: [AdminWarningTeam!]!
+    teamDeleted: Boolean!
+}
+
+type AdminDeletedWarningPage {
+    items: [AdminDeletedWarning!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+"impact.entersPenalty면 '다시 벌칙 대상이 됩니다'(E-42), impact.recordOnly면 '기록만 되살립니다'(E-59), teamDeleted면 '삭제된 팀으로 표시됩니다'(E-43)"
+type AdminWarningRestorePreview {
+    warningId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    restoreTeams: [AdminWarningTeam!]!
+    teamDeleted: Boolean!
+    impact: AdminRecalcImpact!
+}
+
+"복구를 반영한 뒤 그 회원의 경고 상태. warningCount는 보류 주가 남아 있으면 null"
+type AdminRestoredWarning {
+    warningId: ID!
+    member: AdminMemberBrief!
+    weekStart: String!
+    onHold: Boolean!
+    warningCount: Int
+    penaltyTarget: Boolean!
+}
+
+# ---- 게시물 관리 (AD-01 `posts`, 기능명세서 3·9장) ----
+
+extend type Query {
+    """
+    글 · 댓글 목록 (관리자). 삭제되지 않은 것을 최신순 커서 기반 20개로 한 줄에 섞어 보여준다.
+    keyword는 제목 · 내용 · 작성자(닉네임 · GitHub 아이디) 부분 일치(50자 이하). 팀 정보는 싣지 않는다
+    """
+    adminPosts(
+        filter: AdminPostFilter = ALL
+        keyword: String
+        "이전 페이지의 nextCursor"
+        after: String
+    ): AdminPostPage!
+}
+
+extend type Mutation {
+    "글을 삭제한다 (관리자, 소프트 삭제). 이미 삭제된 글은 POST_DELETED, 없는 글은 NOT_FOUND. 관리자 행동 로그가 남는다"
+    adminDeletePost(postId: ID!): Boolean!
+    "댓글을 삭제한다 (관리자, 소프트 삭제). 없거나 이미 삭제된 댓글은 NOT_FOUND. 관리자 행동 로그가 남는다"
+    adminDeleteComment(commentId: ID!): Boolean!
+}
+
+"글 + 댓글 / 글만 / 댓글만"
+enum AdminPostFilter {
+    ALL
+    POSTS
+    COMMENTS
+}
+
+enum AdminPostKind {
+    POST
+    COMMENT
+}
+
+"""
+게시물 관리 한 행. 글이면 id와 postId가 같고 content는 null.
+댓글이면 title에 글 제목, content에 댓글 내용(앞 100자)이 담기고 postId로 글 상세에 이동한다
+"""
+type AdminPostItem {
+    kind: AdminPostKind!
+    id: ID!
+    postId: ID!
+    title: String!
+    content: String
+    author: AdminMemberBrief!
+    "작성 시각 (KST, ISO-8601)"
+    createdAt: String!
+}
+
+type AdminPostPage {
+    items: [AdminPostItem!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}

@@ -1,11 +1,9 @@
 package com.jandilog.post.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +15,8 @@ import org.springframework.stereotype.Service;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.domain.PostSections;
 import com.jandilog.post.domain.PostType;
@@ -35,7 +35,7 @@ import com.jandilog.team.service.TeamAccessService;
 @Service
 public class PostService {
 
-	static final int PAGE_SIZE = 20;
+	static final int PAGE_SIZE = CursorCodec.PAGE_SIZE;
 	private static final int POPULAR_TAG_LIMIT = 10;
 
 	private static final Logger log = LoggerFactory.getLogger(PostService.class);
@@ -148,10 +148,9 @@ public class PostService {
 
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 		List<Post> rows = postRepository.findPage(condition, after, PAGE_SIZE + 1);
-		boolean hasNext = rows.size() > PAGE_SIZE;
-		List<Post> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getId()) : null;
-		return new PostPageResponse(page.stream().map(PostResponse::from).toList(), nextCursor, condition);
+		PageSlice<Post> page = PageSlice.of(rows, last -> encodeCursor(last.getId()));
+		return new PostPageResponse(page.rows().stream().map(PostResponse::from).toList(), page.nextCursor(),
+				condition);
 	}
 
 	public int count(PostSearchCondition condition) {
@@ -227,25 +226,21 @@ public class PostService {
 		}
 	}
 
-	// 커서는 마지막 글의 ObjectId를 Base64url로 감싼 불투명 문자열
-	static String encodeCursor(ObjectId lastId) {
-		return Base64.getUrlEncoder().withoutPadding()
-				.encodeToString(lastId.toHexString().getBytes(StandardCharsets.UTF_8));
+	// 커서는 마지막 글의 ObjectId를 감싼 불투명 문자열. 관리자 게시물 목록도 같은 형식을 쓴다
+	public static String encodeCursor(ObjectId lastId) {
+		return CursorCodec.encode(lastId.toHexString());
 	}
 
-	static ObjectId decodeCursor(String cursor) {
-		if (cursor == null || cursor.isEmpty()) {
+	// 커서가 없으면 null, 형식이 틀리면 잘못된 입력
+	public static ObjectId decodeCursor(String cursor) {
+		String hex = CursorCodec.decode(cursor);
+		if (hex == null) {
 			return null;
 		}
-		try {
-			String hex = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-			if (ObjectId.isValid(hex)) {
-				return new ObjectId(hex);
-			}
-		} catch (IllegalArgumentException e) {
-			// 아래에서 같은 오류로 처리
+		if (!ObjectId.isValid(hex)) {
+			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
-		throw new ApiException(ErrorCode.INVALID_INPUT);
+		return new ObjectId(hex);
 	}
 
 }
