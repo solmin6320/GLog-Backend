@@ -90,6 +90,11 @@ class NoticeCursorTest {
 	}
 
 	@Test
+	void null_커서는_호출_오류다() {
+		assertThatThrownBy(() -> Cursor.decode(null)).isInstanceOf(NullPointerException.class);
+	}
+
+	@Test
 	void id가_0이나_음수인_커서는_INVALID_INPUT이다() {
 		assertInvalid(encodeRaw("P|2026-09-03T10:30:15|0"));
 		assertInvalid(encodeRaw("N|2026-09-03T10:30:15|-5"));
