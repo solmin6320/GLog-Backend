@@ -56,11 +56,24 @@ public class WarningRecalculationService {
 		memberLockRepository.findLockedById(memberId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 	}
 
+	// 여러 회원 행을 id 오름차순으로 하나씩 잠근다. 같은 회원들을 잠그는 다른 트랜잭션과 순서가 같아 교착하지 않는다
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void lockMembers(Collection<Long> memberIds) {
+		memberIds.stream().distinct().sorted().forEach(this::lockMember);
+	}
+
 	// 락을 잡고 다시 계산한다. 변경을 마친 같은 트랜잭션에서 부르면 변경이 반영된 값을 돌려준다
 	@Transactional
 	public WarningRecalcResult recalculate(long memberId) {
 		lockMember(memberId);
 		return compute(load(memberId), Map.of(), Set.of());
+	}
+
+	// 여러 회원을 잠그고 한 번에 다시 계산한다. 결과는 회원마다 recalculate를 부른 것과 같다
+	@Transactional
+	public Map<Long, WarningRecalcResult> recalculateAll(Collection<Long> memberIds) {
+		lockMembers(memberIds);
+		return computeAll(memberIds);
 	}
 
 	// 락 없이 읽기만 한다. 화면의 경고 수·연속 통과 표시용
@@ -73,9 +86,7 @@ public class WarningRecalculationService {
 	// 판정·경고·이행 기준선을 테이블마다 한 번씩만 읽는다. 결과는 calculate를 회원마다 부른 것과 같다
 	@Transactional(readOnly = true)
 	public Map<Long, WarningRecalcResult> calculateAll(Collection<Long> memberIds) {
-		Map<Long, WarningRecalcResult> results = new HashMap<>();
-		loadAll(memberIds).forEach((memberId, history) -> results.put(memberId, compute(history, Map.of(), Set.of())));
-		return results;
+		return computeAll(memberIds);
 	}
 
 	// 미리보기: hypothetical(주차 → 가정한 판정 상태)을 적용한 값과 지금 값을 비교한다. DB는 바꾸지 않는다.
@@ -92,6 +103,12 @@ public class WarningRecalculationService {
 		History history = load(memberId);
 		return new WarningRecalcPreview(compute(history, Map.of(), Set.of()),
 				compute(history, hypothetical, restoredWarningWeeks));
+	}
+
+	private Map<Long, WarningRecalcResult> computeAll(Collection<Long> memberIds) {
+		Map<Long, WarningRecalcResult> results = new HashMap<>();
+		loadAll(memberIds).forEach((memberId, history) -> results.put(memberId, compute(history, Map.of(), Set.of())));
+		return results;
 	}
 
 	private History load(long memberId) {
