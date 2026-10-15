@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.judgment.domain.JudgmentCalculator;
 import com.jandilog.judgment.domain.JudgmentInput;
 import com.jandilog.judgment.domain.JudgmentStatus;
@@ -63,17 +63,15 @@ public class ProfileJudgmentHistoryService {
 		// 필터를 쿼리에서 걸어 한 페이지가 걸러진 뒤에도 20행이고 nextCursor가 어긋나지 않는다
 		List<WeeklyJudgment> rows = queryRepository.findVisiblePage(memberId, before, JudgmentStatus.EXCLUDED,
 				SkipReason.NO_TEAM, PageRequest.of(0, CursorCodec.PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<WeeklyJudgment> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
+		PageSlice<WeeklyJudgment> page = PageSlice.of(rows, last -> CursorCodec.encode(last.getWeekStart().toString()));
 
-		List<ProfileJudgmentWeek> items = new ArrayList<>(page.size() + 1);
+		List<ProfileJudgmentWeek> items = new ArrayList<>(page.rows().size() + 1);
 		// 진행 중 행은 최근 주보다 위라서 첫 페이지에만 붙는다
 		if (after == null || after.isEmpty()) {
 			inProgressWeek(memberId).ifPresent(items::add);
 		}
-		page.stream().map(ProfileJudgmentWeek::from).forEach(items::add);
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).getWeekStart().toString()) : null;
-		return new ProfileJudgmentPage(items, nextCursor);
+		page.rows().stream().map(ProfileJudgmentWeek::from).forEach(items::add);
+		return new ProfileJudgmentPage(items, page.nextCursor());
 	}
 
 	// 이번 주가 판정 대상이고 아직 판정 행이 없을 때만 진행 중 행을 낸다.
@@ -94,16 +92,7 @@ public class ProfileJudgmentHistoryService {
 
 	// 커서는 마지막 행 주차를 감싼 불투명 문자열. 첫 페이지는 상한 날짜, 형식이 틀리면 잘못된 입력
 	private static LocalDate decodeCursor(String cursor) {
-		String raw = CursorCodec.decode(cursor);
-		if (raw == null) {
-			return CURSOR_START;
-		}
-		try {
-			return LocalDate.parse(raw);
-		}
-		catch (DateTimeParseException e) {
-			throw new ApiException(ErrorCode.INVALID_INPUT);
-		}
+		return CursorCodec.decodeDate(cursor, CURSOR_START);
 	}
 
 }

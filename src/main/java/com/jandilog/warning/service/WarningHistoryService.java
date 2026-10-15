@@ -1,7 +1,6 @@
 package com.jandilog.warning.service;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -12,9 +11,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.jandilog.common.exception.ApiException;
-import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.judgment.domain.JudgmentStatus;
 import com.jandilog.warning.domain.WarningRecalcResult;
 import com.jandilog.warning.dto.WarningCategory;
@@ -57,13 +55,12 @@ public class WarningHistoryService {
 
 		List<WarningHistoryRow> rows = queryRepository.findAlivePage(memberId, JudgmentStatus.FAIL, before,
 				PageRequest.of(0, CursorCodec.PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<WarningHistoryRow> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
+		PageSlice<WarningHistoryRow> page = PageSlice.of(rows, last -> CursorCodec.encode(last.weekStart().toString()));
 		Map<Long, List<WarningCategory>> categories = categoryReader
-				.categoriesOf(page.stream().map(WarningHistoryRow::warningId).toList());
+				.categoriesOf(page.rows().stream().map(WarningHistoryRow::warningId).toList());
 
-		List<WarningHistoryItem> items = new ArrayList<>(page.size());
-		for (WarningHistoryRow row : page) {
+		List<WarningHistoryItem> items = new ArrayList<>(page.rows().size());
+		for (WarningHistoryRow row : page.rows()) {
 			WarningHistoryStatus status = statusOf(row.weekStart(), active, deducted, fulfilled);
 			// 재계산이 어느 쪽에도 넣지 않은 경고는 경고로 세지 않는 것이라 보이지 않는다
 			if (status == null) {
@@ -74,8 +71,7 @@ public class WarningHistoryService {
 					categories.getOrDefault(row.warningId(), List.of()).stream().map(WarningCategory::name).toList(),
 					status));
 		}
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).weekStart().toString()) : null;
-		return new WarningHistoryPage(false, items, nextCursor);
+		return new WarningHistoryPage(false, items, page.nextCursor());
 	}
 
 	private static WarningHistoryStatus statusOf(LocalDate week, Set<LocalDate> active, Set<LocalDate> deducted,
@@ -90,16 +86,7 @@ public class WarningHistoryService {
 	}
 
 	private static LocalDate decodeCursor(String cursor) {
-		String raw = CursorCodec.decode(cursor);
-		if (raw == null) {
-			return CURSOR_START;
-		}
-		try {
-			return LocalDate.parse(raw);
-		}
-		catch (DateTimeParseException e) {
-			throw new ApiException(ErrorCode.INVALID_INPUT);
-		}
+		return CursorCodec.decodeDate(cursor, CURSOR_START);
 	}
 
 }
