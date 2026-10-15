@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.notice.domain.Notice;
 import com.jandilog.notice.dto.NoticeInput;
 import com.jandilog.notice.dto.NoticePage;
@@ -25,7 +27,7 @@ import com.jandilog.notice.repository.NoticeRepository;
 @Service
 public class NoticeService {
 
-	static final int PAGE_SIZE = 20;
+	static final int PAGE_SIZE = CursorCodec.PAGE_SIZE;
 	private static final int TITLE_MAX_LENGTH = 200;
 	// notice.content는 TEXT(65,535바이트)
 	private static final int CONTENT_MAX_BYTES = 65_535;
@@ -50,10 +52,8 @@ public class NoticeService {
 			rows = noticeRepository.findPageAfter(after.pinned(), after.createdAt(), after.id(), pageRequest);
 		}
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
-		boolean hasNext = rows.size() > PAGE_SIZE;
-		List<Notice> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? Cursor.of(page.get(page.size() - 1)).encode() : null;
-		return new NoticePage(page.stream().map(NoticeResponse::from).toList(), nextCursor);
+		PageSlice<Notice> page = PageSlice.of(rows, last -> Cursor.of(last).encode());
+		return new NoticePage(page.rows().stream().map(NoticeResponse::from).toList(), page.nextCursor());
 	}
 
 	@Transactional(readOnly = true)

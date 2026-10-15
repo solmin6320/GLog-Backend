@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.exemption.domain.ExemptionPeriod;
 import com.jandilog.exemption.domain.PersonalExemption;
@@ -160,10 +161,8 @@ public class PersonalExemptionService {
 	}
 
 	private PersonalExemptionPage toPage(List<PersonalExemption> rows) {
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<PersonalExemption> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).getId()) : null;
-		return new PersonalExemptionPage(toResponses(page), nextCursor);
+		PageSlice<PersonalExemption> page = PageSlice.of(rows, last -> CursorCodec.encode(last.getId()));
+		return new PersonalExemptionPage(toResponses(page.rows()), page.nextCursor());
 	}
 
 	// 대상·요청자 표시 정보와 면제 기간 겹침(E-44)을 목록 단위로 한 번에 읽는다

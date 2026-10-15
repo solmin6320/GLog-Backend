@@ -6,6 +6,7 @@ import java.util.function.Function;
 import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.post.domain.Comment;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.dto.CommentResponse;
@@ -60,10 +61,8 @@ public class TeamPostManageService {
 
 	// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 	private static <R, T> CursorPage<T> page(List<R> rows, Function<R, ObjectId> idOf, Function<R, T> mapper) {
-		boolean hasNext = rows.size() > PostService.PAGE_SIZE;
-		List<R> page = hasNext ? rows.subList(0, PostService.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? PostService.encodeCursor(idOf.apply(page.get(page.size() - 1))) : null;
-		return new CursorPage<>(page.stream().map(mapper).toList(), nextCursor);
+		PageSlice<R> page = PageSlice.of(rows, last -> PostService.encodeCursor(idOf.apply(last)));
+		return new CursorPage<>(page.rows().stream().map(mapper).toList(), page.nextCursor());
 	}
 
 }

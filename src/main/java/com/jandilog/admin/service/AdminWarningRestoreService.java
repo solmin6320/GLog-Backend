@@ -26,6 +26,7 @@ import com.jandilog.admin.repository.AdminWarningQueryRepository;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.common.time.KstFormats;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.judgment.domain.JudgmentStatus;
@@ -84,14 +85,13 @@ public class AdminWarningRestoreService {
 		}
 		List<Warning> rows = queryRepository.findRestorablePage(JudgmentStatus.FAIL, before,
 				PageRequest.of(0, CursorCodec.PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<Warning> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).getId()) : null;
+		PageSlice<Warning> page = PageSlice.of(rows, last -> CursorCodec.encode(last.getId()));
 
-		Map<Long, Member> members = memberRepository.findAllById(page.stream().map(Warning::getMemberId).toList())
-				.stream().collect(Collectors.toMap(Member::getId, Function.identity()));
+		Map<Long, Member> members = memberRepository
+				.findAllById(page.rows().stream().map(Warning::getMemberId).toList()).stream()
+				.collect(Collectors.toMap(Member::getId, Function.identity()));
 		List<AdminDeletedWarning> items = new ArrayList<>();
-		for (Warning warning : page) {
+		for (Warning warning : page.rows()) {
 			Member member = members.get(warning.getMemberId());
 			if (member == null) {
 				continue;
@@ -101,7 +101,7 @@ public class AdminWarningRestoreService {
 					warning.getWeekStart().toString(), warning.getDeleteReason(),
 					KstFormats.of(warning.getDeletedAt()), teams, teams.isEmpty()));
 		}
-		return new AdminDeletedWarningPage(items, nextCursor);
+		return new AdminDeletedWarningPage(items, page.nextCursor());
 	}
 
 	// 복구하면 경고 수가 몇 개에서 몇 개로 바뀌는지, 벌칙 대상에 다시 들어가는지를 먼저 보여준다. 아무것도 바꾸지 않는다
