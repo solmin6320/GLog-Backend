@@ -1,5 +1,6 @@
 package com.jandilog.team.repository;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.Query;
@@ -31,9 +32,9 @@ public interface TeamWarningRepository extends Repository<WarningTeam, WarningTe
 	@Query("select wt from WarningTeam wt where wt.teamId = :teamId and wt.removedAt is null")
 	List<WarningTeam> findLiveCategoriesOfTeam(@Param("teamId") long teamId);
 
-	// 경고에 남은(빠지지 않은) 카테고리 수. 0이면 경고를 소프트 삭제한다
-	@Query("select count(wt) from WarningTeam wt where wt.warningId = :warningId and wt.removedAt is null")
-	long countLiveCategories(@Param("warningId") long warningId);
+	// 빠지지 않은 카테고리가 남은 경고 id. 여기 없는 경고는 남은 카테고리가 0이라 소프트 삭제한다
+	@Query("select distinct wt.warningId from WarningTeam wt where wt.warningId in :warningIds and wt.removedAt is null")
+	List<Long> findWarningIdsWithLiveCategory(@Param("warningIds") Collection<Long> warningIds);
 
 	// 그 팀 카테고리가 붙은 경고를 가진 회원 id. 팀 삭제 때 재계산할 회원을 모은다
 	@Query("""
