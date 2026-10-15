@@ -1,6 +1,8 @@
 package com.jandilog.common.pagination;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 
 import com.jandilog.common.exception.ApiException;
@@ -43,6 +45,19 @@ public final class CursorCodec {
 		try {
 			return Long.parseLong(raw);
 		} catch (NumberFormatException e) {
+			throw new ApiException(ErrorCode.INVALID_INPUT);
+		}
+	}
+
+	// 날짜 커서(주차 등). 없으면 defaultValue
+	public static LocalDate decodeDate(String cursor, LocalDate defaultValue) {
+		String raw = decode(cursor);
+		if (raw == null) {
+			return defaultValue;
+		}
+		try {
+			return LocalDate.parse(raw);
+		} catch (DateTimeParseException e) {
 			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
 	}

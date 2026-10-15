@@ -1,13 +1,11 @@
 package com.jandilog.judgment.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.judgment.domain.JudgmentCalculator;
 import com.jandilog.judgment.domain.JudgmentDay;
 import com.jandilog.judgment.domain.JudgmentWeek;
@@ -42,7 +42,7 @@ import com.jandilog.member.repository.MemberRepository;
 @Service
 public class WeeklyActivityService {
 
-	static final int PAGE_SIZE = 20;
+	static final int PAGE_SIZE = CursorCodec.PAGE_SIZE;
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 	// 첫 페이지의 커서 상한. MariaDB DATE 범위 안의 먼 미래
 	private static final LocalDate CURSOR_START = LocalDate.of(9999, 12, 31);
@@ -174,17 +174,15 @@ public class WeeklyActivityService {
 		LocalDate before = decodeCursor(cursor);
 		List<WeeklyJudgment> rows = judgmentRepository.findByMemberIdAndWeekStartLessThanOrderByWeekStartDesc(memberId,
 				before, PageRequest.of(0, PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > PAGE_SIZE;
-		List<WeeklyJudgment> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
+		PageSlice<WeeklyJudgment> page = PageSlice.of(rows, last -> encodeCursor(last.getWeekStart()));
 		// 제외·면제·보류 주는 인증일·기록글을 "—"(null)로 둔다. 저장된 값은 지우지 않아 통과·미달로 되돌리면 다시 보인다
-		List<JudgmentHistoryItem> items = page.stream()
+		List<JudgmentHistoryItem> items = page.rows().stream()
 				.map(j -> new JudgmentHistoryItem(j.getWeekStart().toString(), j.getWeekStart().plusDays(6).toString(),
 						j.getStatus(), j.getSkipReason(), j.getHoldReason(),
 						j.getStatus().showsCounts() ? j.getVerifiedDays() : null,
 						j.getStatus().showsCounts() ? j.getRecordCount() : null, j.isCorrected()))
 				.toList();
-		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getWeekStart()) : null;
-		return new JudgmentHistoryPage(items, nextCursor);
+		return new JudgmentHistoryPage(items, page.nextCursor());
 	}
 
 	// 배너는 하나만: E-39 → E-32 → E-36 → E-46 순 (CM-01 ⑥)
@@ -223,20 +221,12 @@ public class WeeklyActivityService {
 	}
 
 	static String encodeCursor(LocalDate lastWeekStart) {
-		return Base64.getUrlEncoder().withoutPadding()
-				.encodeToString(lastWeekStart.toString().getBytes(StandardCharsets.UTF_8));
+		return CursorCodec.encode(lastWeekStart.toString());
 	}
 
+	// 커서가 없으면 첫 페이지, 형식이 틀리면 잘못된 입력
 	static LocalDate decodeCursor(String cursor) {
-		if (cursor == null || cursor.isEmpty()) {
-			return CURSOR_START;
-		}
-		try {
-			return LocalDate.parse(new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
-		}
-		catch (IllegalArgumentException | DateTimeParseException e) {
-			throw new ApiException(ErrorCode.INVALID_INPUT);
-		}
+		return CursorCodec.decodeDate(cursor, CURSOR_START);
 	}
 
 }
