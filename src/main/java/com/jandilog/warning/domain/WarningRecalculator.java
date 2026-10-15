@@ -32,6 +32,26 @@ public final class WarningRecalculator {
 
 	// fulfilledAt: 가장 최근 penalty_fulfillment.fulfilled_at, 없으면 null
 	public static WarningRecalcResult recalculate(Collection<WeekEntry> weeks, LocalDateTime fulfilledAt) {
+		Scan scan = new Scan();
+		for (WeekEntry week : orderedAndValidated(weeks)) {
+			if (isBeforeBaseline(week.weekStart(), fulfilledAt)) {
+				scan.beforeBaseline(week);
+				continue;
+			}
+			switch (week.status()) {
+				case EXEMPT, EXCLUDED -> {
+					// 건너뜀
+				}
+				case HOLD -> scan.hold(week);
+				case FAIL -> scan.fail(week);
+				case PASS -> scan.pass();
+			}
+		}
+		return scan.result();
+	}
+
+	// week_start 오름차순으로 정렬한다. 월요일이 아니거나 같은 주차가 두 번이면 거부한다
+	private static List<WeekEntry> orderedAndValidated(Collection<WeekEntry> weeks) {
 		List<WeekEntry> ordered = new ArrayList<>(weeks);
 		ordered.sort(Comparator.comparing(WeekEntry::weekStart));
 		Set<LocalDate> seen = new HashSet<>();
@@ -43,60 +63,64 @@ public final class WarningRecalculator {
 				throw new IllegalArgumentException("같은 주차가 두 번 들어왔어요: " + week.weekStart());
 			}
 		}
+		return ordered;
+	}
 
-		List<LocalDate> beforeBaseline = new ArrayList<>();
-		List<LocalDate> holdWeeks = new ArrayList<>();
+	// 주를 오름차순으로 훑는 동안 쌓이는 상태. 주 하나를 처리하는 규칙을 메서드 하나씩으로 나눈다
+	private static final class Scan {
+
+		private final List<LocalDate> beforeBaseline = new ArrayList<>();
+		private final List<LocalDate> holdWeeks = new ArrayList<>();
 		// 아직 차감되지 않은 살아 있는 경고. 앞이 가장 오래된 경고다
-		List<LocalDate> active = new ArrayList<>();
-		List<LocalDate> deducted = new ArrayList<>();
-		int streak = 0;
+		private final List<LocalDate> active = new ArrayList<>();
+		private final List<LocalDate> deducted = new ArrayList<>();
+		private int streak;
 
-		for (WeekEntry week : ordered) {
-			if (isBeforeBaseline(week.weekStart(), fulfilledAt)) {
-				if (week.countsAsWarning()) {
-					beforeBaseline.add(week.weekStart());
-				}
-				continue;
-			}
-			switch (week.status()) {
-				case EXEMPT, EXCLUDED -> {
-					// 건너뜀
-				}
-				case HOLD -> holdWeeks.add(week.weekStart());
-				case FAIL -> {
-					streak = 0;
-					// 삭제 표시된 경고는 세지 않는다. 그 주의 미달 자체는 연속을 끊는다
-					if (week.countsAsWarning()) {
-						active.add(week.weekStart());
-					}
-				}
-				case PASS -> {
-					if (active.size() >= PENALTY_THRESHOLD) {
-						streak = 0;
-					}
-					else {
-						streak++;
-						if (streak == STREAK_FOR_DEDUCTION) {
-							if (!active.isEmpty()) {
-								deducted.add(active.remove(0));
-							}
-							streak = 0;
-						}
-					}
-				}
+		void beforeBaseline(WeekEntry week) {
+			if (week.countsAsWarning()) {
+				beforeBaseline.add(week.weekStart());
 			}
 		}
 
-		if (!holdWeeks.isEmpty()) {
-			return new WarningRecalcResult.OnHold(holdWeeks);
+		void hold(WeekEntry week) {
+			holdWeeks.add(week.weekStart());
 		}
-		return new WarningRecalcResult.Calculated(active.size(), streak, active.size() >= PENALTY_THRESHOLD, active,
-				deducted, beforeBaseline);
+
+		void fail(WeekEntry week) {
+			streak = 0;
+			// 삭제 표시된 경고는 세지 않는다. 그 주의 미달 자체는 연속을 끊는다
+			if (week.countsAsWarning()) {
+				active.add(week.weekStart());
+			}
+		}
+
+		void pass() {
+			if (active.size() >= PENALTY_THRESHOLD) {
+				streak = 0;
+				return;
+			}
+			streak++;
+			if (streak == STREAK_FOR_DEDUCTION) {
+				if (!active.isEmpty()) {
+					deducted.add(active.remove(0));
+				}
+				streak = 0;
+			}
+		}
+
+		WarningRecalcResult result() {
+			if (!holdWeeks.isEmpty()) {
+				return new WarningRecalcResult.OnHold(holdWeeks);
+			}
+			return new WarningRecalcResult.Calculated(active.size(), streak, active.size() >= PENALTY_THRESHOLD,
+					active, deducted, beforeBaseline);
+		}
+
 	}
 
 	// 주가 끝난 시각(다음 월요일 00:00)이 이행 시각 이하면 이행 전에 이미 지나간 주다.
 	// 이행한 주는 아직 판정 전이므로 이후로 센다
-	static boolean isBeforeBaseline(LocalDate weekStart, LocalDateTime fulfilledAt) {
+	public static boolean isBeforeBaseline(LocalDate weekStart, LocalDateTime fulfilledAt) {
 		return fulfilledAt != null && !JudgmentWeek.endExclusive(weekStart).isAfter(fulfilledAt);
 	}
 

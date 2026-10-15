@@ -1,6 +1,7 @@
 package com.jandilog.judgment.repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +20,9 @@ public interface WeeklyJudgmentRepository extends JpaRepository<WeeklyJudgment, 
 
 	// 회원의 전체 판정 이력, 오래된 주부터. 경고 재계산이 처음부터 훑는 입력이다
 	List<WeeklyJudgment> findByMemberIdOrderByWeekStartAsc(long memberId);
+
+	// 여러 회원의 전체 판정 이력을 한 번에 (uk_judgment)
+	List<WeeklyJudgment> findByMemberIdIn(Collection<Long> memberIds);
 
 	// 보류 목록 (idx_judgment_status)
 	List<WeeklyJudgment> findByStatusOrderByWeekStartAscMemberIdAsc(JudgmentStatus status);

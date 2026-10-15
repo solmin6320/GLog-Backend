@@ -1,11 +1,9 @@
 package com.jandilog.post.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +15,8 @@ import org.springframework.stereotype.Service;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.domain.PostSections;
 import com.jandilog.post.domain.PostType;
@@ -35,7 +35,7 @@ import com.jandilog.team.service.TeamAccessService;
 @Service
 public class PostService {
 
-	static final int PAGE_SIZE = 20;
+	static final int PAGE_SIZE = CursorCodec.PAGE_SIZE;
 	private static final int POPULAR_TAG_LIMIT = 10;
 
 	private static final Logger log = LoggerFactory.getLogger(PostService.class);
@@ -83,26 +83,13 @@ public class PostService {
 	// 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장이 고칠 수 있다 (기능명세서 2장, BD-04)
 	public PostResponse update(long memberId, String postId, UpdatePostInput input) {
 		Post current = loadAlive(postId);
-		boolean author = current.getAuthorId() == memberId;
-		if (!author && !teamAccess.isLeaderOfAliveTeam(current.getTeamId(), memberId)) {
-			throw new ApiException(ErrorCode.FORBIDDEN);
-		}
+		requireEditor(current, memberId);
 
 		String title = PostInputRules.title(input.title());
 		PostSections sections = PostInputRules.sections(current.getType(), input.sections());
 		List<String> tags = PostInputRules.tags(input.tags());
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
-		Long teamId;
-		if (author) {
-			teamId = PostInputRules.teamId(input.teamId());
-			// 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않는다(팀에서 나간 뒤에도 내용은 고칠 수 있게). 새로 연결하거나 바꿀 때만 소속을 본다
-			if (teamId != null && !teamId.equals(current.getTeamId())) {
-				teamAccess.requireLinkable(teamId, memberId);
-			}
-		} else {
-			// 팀장은 남의 글의 팀 연결을 바꾸지 못한다 (BD-04 ⑨ 비활성). 입력의 teamId는 읽지 않고 기존 연결을 유지한다
-			teamId = current.getTeamId();
-		}
+		Long teamId = teamIdAfterEdit(current, memberId, input);
 
 		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, now());
 		// 그 사이 삭제됐으면 바뀌지 않는다 (EX-BD04-02)
@@ -148,10 +135,9 @@ public class PostService {
 
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 		List<Post> rows = postRepository.findPage(condition, after, PAGE_SIZE + 1);
-		boolean hasNext = rows.size() > PAGE_SIZE;
-		List<Post> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getId()) : null;
-		return new PostPageResponse(page.stream().map(PostResponse::from).toList(), nextCursor, condition);
+		PageSlice<Post> page = PageSlice.of(rows, last -> encodeCursor(last.getId()));
+		return new PostPageResponse(page.rows().stream().map(PostResponse::from).toList(), page.nextCursor(),
+				condition);
 	}
 
 	public int count(PostSearchCondition condition) {
@@ -195,9 +181,34 @@ public class PostService {
 
 	// 글 삭제는 작성자 본인만(팀장은 수정만 가능, 관리자 삭제는 관리자 모듈에서 따로 붙인다)
 	private static void requireAuthor(Post post, long memberId) {
-		if (post.getAuthorId() != memberId) {
+		if (!isAuthor(post, memberId)) {
 			throw new ApiException(ErrorCode.FORBIDDEN);
 		}
+	}
+
+	// 글 수정은 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장만
+	private void requireEditor(Post post, long memberId) {
+		if (!isAuthor(post, memberId) && !teamAccess.isLeaderOfAliveTeam(post.getTeamId(), memberId)) {
+			throw new ApiException(ErrorCode.FORBIDDEN);
+		}
+	}
+
+	// 수정 뒤의 팀 연결. 작성자는 입력대로 바꿀 수 있고, 팀장은 남의 글의 팀 연결을 바꾸지 못한다
+	private Long teamIdAfterEdit(Post current, long memberId, UpdatePostInput input) {
+		if (!isAuthor(current, memberId)) {
+			// 입력의 teamId는 읽지 않고 기존 연결을 유지한다 (BD-04 ⑨ 비활성)
+			return current.getTeamId();
+		}
+		Long teamId = PostInputRules.teamId(input.teamId());
+		// 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않는다(팀에서 나간 뒤에도 내용은 고칠 수 있게). 새로 연결하거나 바꿀 때만 소속을 본다
+		if (teamId != null && !teamId.equals(current.getTeamId())) {
+			teamAccess.requireLinkable(teamId, memberId);
+		}
+		return teamId;
+	}
+
+	private static boolean isAuthor(Post post, long memberId) {
+		return post.getAuthorId() == memberId;
 	}
 
 	private void undoCreate(Post post) {
@@ -227,25 +238,21 @@ public class PostService {
 		}
 	}
 
-	// 커서는 마지막 글의 ObjectId를 Base64url로 감싼 불투명 문자열
-	static String encodeCursor(ObjectId lastId) {
-		return Base64.getUrlEncoder().withoutPadding()
-				.encodeToString(lastId.toHexString().getBytes(StandardCharsets.UTF_8));
+	// 커서는 마지막 글의 ObjectId를 감싼 불투명 문자열. 관리자 게시물 목록도 같은 형식을 쓴다
+	public static String encodeCursor(ObjectId lastId) {
+		return CursorCodec.encode(lastId.toHexString());
 	}
 
-	static ObjectId decodeCursor(String cursor) {
-		if (cursor == null || cursor.isEmpty()) {
+	// 커서가 없으면 null, 형식이 틀리면 잘못된 입력
+	public static ObjectId decodeCursor(String cursor) {
+		String hex = CursorCodec.decode(cursor);
+		if (hex == null) {
 			return null;
 		}
-		try {
-			String hex = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-			if (ObjectId.isValid(hex)) {
-				return new ObjectId(hex);
-			}
-		} catch (IllegalArgumentException e) {
-			// 아래에서 같은 오류로 처리
+		if (!ObjectId.isValid(hex)) {
+			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
-		throw new ApiException(ErrorCode.INVALID_INPUT);
+		return new ObjectId(hex);
 	}
 
 }
