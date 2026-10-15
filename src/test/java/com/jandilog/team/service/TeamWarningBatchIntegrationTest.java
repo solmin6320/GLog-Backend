@@ -150,17 +150,57 @@ class TeamWarningBatchIntegrationTest extends AdminIntegrationTest {
 		assertThat(teamDeleteStatements(6)).isEqualTo(7 + 4 * 6);
 	}
 
+	@Test
+	@DisplayName("경고 카테고리가 없는 팀 삭제는 아무것도 바꾸지 않고 조회 두 번(회원 id · 카테고리)으로 끝난다")
+	void teamDeleteWithoutCategoriesChangesNothing() {
+		long leader = activeMember();
+		long team = data.team(data.uniqueName("빈팀"), true, leader);
+		long other = data.team(data.uniqueName("옆팀"), true, leader);
+		long elsewhere = data.failWithWarning(activeMember(), WEEK, other);
+
+		long count = statements(() -> inTransaction(() -> teamWarningService.removeCategoriesOnTeamDelete(team, NOW)));
+
+		assertThat(count).isEqualTo(2);
+		assertThat(deleteState(elsewhere)).isEqualTo("alive");
+		assertThat(removedAt(elsewhere, other)).isNull();
+	}
+
+	@Test
+	@DisplayName("recalculateAll은 빈 입력이면 잠금·조회 없이 빈 결과이고, 같은 회원이 겹쳐도 한 번만 잠그고 계산한다")
+	void recalculateAllHandlesEmptyAndDuplicateInput() {
+		long team = data.team(data.uniqueName("겹침팀"), true, adminId);
+		long first = activeMember();
+		data.failWithWarning(first, WEEK, team);
+		long second = activeMember();
+		data.pass(second, WEEK);
+		List<Map<Long, WarningRecalcResult>> results = new ArrayList<>();
+
+		assertThat(statements(() -> results.add(recalculation.recalculateAll(List.of())))).isZero();
+		assertThat(results.get(0)).isEmpty();
+
+		// 잠금 2(회원 둘) + 판정·경고·이행 3
+		assertThat(statements(() -> results.add(recalculation.recalculateAll(List.of(first, second, first)))))
+				.isEqualTo(5);
+		assertThat(results.get(1)).containsOnlyKeys(first, second);
+		assertThat(results.get(1).get(first)).isEqualTo(recalculation.recalculate(first));
+		assertThat(results.get(1).get(second)).isEqualTo(recalculation.recalculate(second));
+	}
+
 	private long teamDeleteStatements(int members) {
 		long team = data.team(data.uniqueName("쿼리팀"), true, adminId);
 		for (int i = 0; i < members; i++) {
 			data.failWithWarning(activeMember(), WEEK, team);
 		}
+		return statements(() -> inTransaction(() -> teamWarningService.removeCategoriesOnTeamDelete(team, NOW)));
+	}
+
+	private long statements(Runnable work) {
 		Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
 		boolean enabled = statistics.isStatisticsEnabled();
 		statistics.setStatisticsEnabled(true);
 		try {
 			statistics.clear();
-			inTransaction(() -> teamWarningService.removeCategoriesOnTeamDelete(team, NOW));
+			work.run();
 			return statistics.getPrepareStatementCount();
 		}
 		finally {
