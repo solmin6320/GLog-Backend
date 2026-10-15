@@ -51,8 +51,17 @@ public class MemberWeekService {
 		if (subjects.isEmpty()) {
 			return Map.of();
 		}
-		List<Long> memberIds = subjects.stream().map(Subject::memberId).distinct().toList();
+		WeekData data = readWeekData(subjects.stream().map(Subject::memberId).distinct().toList(), weekStart);
 
+		Map<Long, MemberWeek> result = new HashMap<>();
+		for (Subject subject : subjects) {
+			result.put(subject.memberId(), weekOf(subject, weekStart, data));
+		}
+		return result;
+	}
+
+	// 회원 전체의 확정 판정·저장 일자·기록글·개인 면제·면제 기간을 쿼리 한 번씩으로 읽는다
+	private WeekData readWeekData(List<Long> memberIds, LocalDate weekStart) {
 		Map<Long, WeeklyJudgment> judgments = repository.findConfirmedJudgments(memberIds, weekStart).stream()
 				.collect(Collectors.toMap(WeeklyJudgment::getMemberId, j -> j));
 		Map<Long, List<JudgmentDay>> storedDays = repository
@@ -61,26 +70,30 @@ public class MemberWeekService {
 		Map<Long, Map<LocalDate, Integer>> records = recordsByMember(memberIds, weekStart);
 		Set<Long> exempted = repository.findMembersWithApprovedExemption(memberIds, weekStart);
 		boolean exemptionPeriod = sourceRepository.isExemptionPeriod(weekStart);
+		return new WeekData(judgments, storedDays, records, exempted, exemptionPeriod);
+	}
 
-		Map<Long, MemberWeek> result = new HashMap<>();
-		for (Subject subject : subjects) {
-			long memberId = subject.memberId();
-			WeeklyJudgment judgment = judgments.get(memberId);
-			if (judgment != null) {
-				MemberWeek stored = MemberWeekCalculator.confirmed(judgment,
-						storedDays.getOrDefault(judgment.getId(), List.of()));
-				if (stored != null) {
-					result.put(memberId, stored);
-					continue;
-				}
+	// 확정된 통과·미달 주는 확정 결과를, 아니면 잔디 캐시와 기록글로 계산하고 제외·면제 주면 상태를 덮는다
+	private MemberWeek weekOf(Subject subject, LocalDate weekStart, WeekData data) {
+		long memberId = subject.memberId();
+		WeeklyJudgment judgment = data.judgments().get(memberId);
+		if (judgment != null) {
+			MemberWeek stored = MemberWeekCalculator.confirmed(judgment,
+					data.storedDays().getOrDefault(judgment.getId(), List.of()));
+			if (stored != null) {
+				return stored;
 			}
-			GrassSnapshot snapshot = grassCacheService.findLatest(memberId).orElse(null);
-			MemberWeek live = MemberWeekCalculator.live(weekStart, snapshot, records.getOrDefault(memberId, Map.of()));
-			TeamBoardStatus fixed = fixedStatus(subject, judgment, weekStart, exemptionPeriod,
-					exempted.contains(memberId));
-			result.put(memberId, fixed == null ? live : live.withStatus(fixed));
 		}
-		return result;
+		GrassSnapshot snapshot = grassCacheService.findLatest(memberId).orElse(null);
+		MemberWeek live = MemberWeekCalculator.live(weekStart, snapshot,
+				data.records().getOrDefault(memberId, Map.of()));
+		TeamBoardStatus fixed = fixedStatus(subject, judgment, weekStart, data.exemptionPeriod(),
+				data.exempted().contains(memberId));
+		return fixed == null ? live : live.withStatus(fixed);
+	}
+
+	private record WeekData(Map<Long, WeeklyJudgment> judgments, Map<Long, List<JudgmentDay>> storedDays,
+			Map<Long, Map<LocalDate, Integer>> records, Set<Long> exempted, boolean exemptionPeriod) {
 	}
 
 	// 확정 결과가 있으면 그것, 없으면 판정 제외·면제 주인지(첫 참가 주·면제 기간·개인 면제)를 본다. 아니면 null
