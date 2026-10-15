@@ -7,6 +7,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -138,9 +139,9 @@ public class NoticeService {
 					(pinned ? "P" : "N") + "|" + DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(createdAt) + "|" + id);
 		}
 
-		// 목록은 커서가 있을 때만 부른다. 비었거나 형식이 틀리면 INVALID_INPUT
+		// 목록은 커서가 있을 때만 부른다. null은 호출 오류(NPE), 비었거나 형식이 틀리면 INVALID_INPUT
 		static Cursor decode(String cursor) {
-			String raw = CursorCodec.decode(cursor);
+			String raw = CursorCodec.decode(Objects.requireNonNull(cursor));
 			if (raw != null) {
 				String[] parts = raw.split("\\|", -1);
 				try {
