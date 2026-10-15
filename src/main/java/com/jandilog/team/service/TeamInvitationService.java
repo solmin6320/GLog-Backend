@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.member.domain.Member;
 import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.post.dto.CursorPage;
@@ -97,20 +98,19 @@ public class TeamInvitationService {
 		List<TeamInvitation> rows = after == null
 				? invitationRepository.findSentPage(teamId, TeamCursor.fetchSize())
 				: invitationRepository.findSentPageAfter(teamId, after.time(), after.id(), TeamCursor.fetchSize());
-		String nextCursor = TeamCursor.nextOf(rows, i -> new TeamCursor(i.getCreatedAt(), i.getId()));
-		List<TeamInvitation> page = TeamCursor.trim(rows);
+		PageSlice<TeamInvitation> page = TeamCursor.slice(rows, i -> new TeamCursor(i.getCreatedAt(), i.getId()));
 		Map<Long, Member> invitees = teamService
-				.membersById(page.stream().map(TeamInvitation::getInviteeId).toList());
+				.membersById(page.rows().stream().map(TeamInvitation::getInviteeId).toList());
 
 		List<SentInvitationResponse> items = new ArrayList<>();
-		for (TeamInvitation invitation : page) {
+		for (TeamInvitation invitation : page.rows()) {
 			Member invitee = invitees.get(invitation.getInviteeId());
 			if (invitee != null) {
 				items.add(new SentInvitationResponse(invitation.getId(), TeamPersonResponse.from(invitee),
 						TeamTimes.format(invitation.getCreatedAt())));
 			}
 		}
-		return new CursorPage<>(items, nextCursor);
+		return new CursorPage<>(items, page.nextCursor());
 	}
 
 	// 팀장이 보낸 초대를 철회한다(TM-06 ③ [취소]). 대기 중인 초대만 지운다
@@ -133,20 +133,19 @@ public class TeamInvitationService {
 		List<TeamInvitation> rows = after == null
 				? invitationRepository.findReceivedPage(memberId, TeamCursor.fetchSize())
 				: invitationRepository.findReceivedPageAfter(memberId, after.time(), after.id(), TeamCursor.fetchSize());
-		String nextCursor = TeamCursor.nextOf(rows, i -> new TeamCursor(i.getCreatedAt(), i.getId()));
-		List<TeamInvitation> page = TeamCursor.trim(rows);
-		if (page.isEmpty()) {
+		PageSlice<TeamInvitation> page = TeamCursor.slice(rows, i -> new TeamCursor(i.getCreatedAt(), i.getId()));
+		if (page.rows().isEmpty()) {
 			return new CursorPage<>(List.of(), null);
 		}
 		Map<Long, Team> teams = new HashMap<>();
-		for (Team team : teamRepository.findByIdIn(page.stream().map(TeamInvitation::getTeamId).toList())) {
+		for (Team team : teamRepository.findByIdIn(page.rows().stream().map(TeamInvitation::getTeamId).toList())) {
 			teams.put(team.getId(), team);
 		}
 		Map<Long, Member> leaders = teamService
 				.membersById(teams.values().stream().map(Team::getLeaderId).distinct().toList());
 
 		List<ReceivedInvitationResponse> items = new ArrayList<>();
-		for (TeamInvitation invitation : page) {
+		for (TeamInvitation invitation : page.rows()) {
 			Team team = teams.get(invitation.getTeamId());
 			Member leader = team == null ? null : leaders.get(team.getLeaderId());
 			if (team != null && leader != null) {
@@ -154,7 +153,7 @@ public class TeamInvitationService {
 						TeamPersonResponse.from(leader), TeamTimes.format(invitation.getCreatedAt())));
 			}
 		}
-		return new CursorPage<>(items, nextCursor);
+		return new CursorPage<>(items, page.nextCursor());
 	}
 
 	// 수락 시점에 이미 다른 경로로 참가했거나(E-17) 팀이 삭제됐으면(E-18) 초대를 정리하고 그 사유를 값으로 돌려준다.
