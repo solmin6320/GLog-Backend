@@ -56,8 +56,8 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		assertThat(rows.get(0).get("status")).isEqualTo("PENDING");
 		assertThat(rows.get(0).get("responded_at")).isNull();
 		assertThat(sent.invitee().id()).isEqualTo(invitee);
-		assertThat(invitationService.sent(leader, team.id())).extracting(SentInvitationResponse::id).containsExactly(sent.id());
-		List<ReceivedInvitationResponse> received = invitationService.received(invitee);
+		assertThat(allSent(leader, team.id())).extracting(SentInvitationResponse::id).containsExactly(sent.id());
+		List<ReceivedInvitationResponse> received = allReceived(invitee);
 		assertThat(received).hasSize(1);
 		assertThat(received.get(0).id()).isEqualTo(sent.id());
 		assertThat(received.get(0).teamId()).isEqualTo(team.id());
@@ -75,7 +75,7 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 
 		invite(leader, team, invitee);
 
-		assertThat(invitationService.received(invitee)).extracting(ReceivedInvitationResponse::teamName).containsExactly("숨은 팀");
+		assertThat(allReceived(invitee)).extracting(ReceivedInvitationResponse::teamName).containsExactly("숨은 팀");
 	}
 
 	@Test
@@ -159,7 +159,7 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		invitationService.invite(leaderOf(teamA), teamA.id(), loginOf(invitee));
 		invitationService.invite(leaderOf(teamB), teamB.id(), loginOf(invitee));
 
-		assertThat(invitationService.received(invitee)).hasSize(2);
+		assertThat(allReceived(invitee)).hasSize(2);
 	}
 
 	private long leaderOf(CreatedTeam team) {
@@ -222,7 +222,7 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		SentInvitationResponse sent = invite(leader, team, kicked);
 
 		assertThat(statusOf(sent.id())).isEqualTo("PENDING");
-		assertThat(invitationService.received(kicked)).extracting(ReceivedInvitationResponse::id).containsExactly(sent.id());
+		assertThat(allReceived(kicked)).extracting(ReceivedInvitationResponse::id).containsExactly(sent.id());
 	}
 
 	@Test
@@ -271,15 +271,15 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		clock.fixAt(Instant.parse("2026-09-04T00:00:00Z"));
 		SentInvitationResponse invD = invite(leader, team, d);
 
-		assertThat(invitationService.sent(leader, team.id())).extracting(SentInvitationResponse::id)
+		assertThat(allSent(leader, team.id())).extracting(SentInvitationResponse::id)
 				.containsExactly(invD.id(), invC.id(), invB.id(), invA.id());
 		invitationService.decline(a, invA.id());
 		invitationService.cancel(leader, invB.id());
 		invitationService.accept(c, invC.id());
 
-		assertThat(invitationService.sent(leader, team.id())).extracting(SentInvitationResponse::id).containsExactly(invD.id());
-		assertApiError(() -> invitationService.sent(c, team.id()), ErrorCode.FORBIDDEN);
-		assertApiError(() -> invitationService.sent(member(), team.id()), ErrorCode.FORBIDDEN);
+		assertThat(allSent(leader, team.id())).extracting(SentInvitationResponse::id).containsExactly(invD.id());
+		assertApiError(() -> allSent(c, team.id()), ErrorCode.FORBIDDEN);
+		assertApiError(() -> allSent(member(), team.id()), ErrorCode.FORBIDDEN);
 	}
 
 	@Test
@@ -297,11 +297,11 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		invite(leader2, team2, invitee);
 		clock.fixAt(Instant.parse("2026-09-03T00:00:00Z"));
 		SentInvitationResponse inv3 = invite(leader3, team3, invitee);
-		assertThat(invitationService.received(invitee)).hasSize(3);
+		assertThat(allReceived(invitee)).hasSize(3);
 
 		leaveService.delete(leader2, team2.id());
 
-		assertThat(invitationService.received(invitee)).extracting(ReceivedInvitationResponse::id)
+		assertThat(allReceived(invitee)).extracting(ReceivedInvitationResponse::id)
 				.containsExactly(inv3.id(), inv1.id());
 	}
 
@@ -315,7 +315,7 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 
 		leaveService.transferLeadership(leader, team.id(), successor);
 
-		assertThat(invitationService.received(invitee)).extracting(r -> r.inviter().id()).containsExactly(successor);
+		assertThat(allReceived(invitee)).extracting(r -> r.inviter().id()).containsExactly(successor);
 	}
 
 	// ----- 철회 -----
@@ -330,8 +330,8 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		invitationService.cancel(leader, sent.id());
 
 		assertThat(invitationRows(team.id(), invitee)).isEmpty();
-		assertThat(invitationService.received(invitee)).isEmpty();
-		assertThat(invitationService.sent(leader, team.id())).isEmpty();
+		assertThat(allReceived(invitee)).isEmpty();
+		assertThat(allSent(leader, team.id())).isEmpty();
 		assertApiError(() -> invitationService.accept(invitee, sent.id()), ErrorCode.NOT_FOUND);
 		assertThat(isActiveMember(team.id(), invitee)).isFalse();
 	}
@@ -408,8 +408,8 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		assertThat(statusOf(sent.id())).isEqualTo("ACCEPTED");
 		assertThat(responded(sent.id())).isTrue();
 		assertThat(firstTeamJoinedAt(invitee)).isNotNull();
-		assertThat(invitationService.received(invitee)).isEmpty();
-		assertThat(invitationService.sent(leader, team.id())).isEmpty();
+		assertThat(allReceived(invitee)).isEmpty();
+		assertThat(allSent(leader, team.id())).isEmpty();
 	}
 
 	@Test
@@ -427,7 +427,7 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		assertThat(membershipRows(team.id(), invitee)).hasSize(1);
 		assertThat(currentMembership(team.id(), invitee).get("joined_by")).isEqualTo("INVITE_CODE");
 		assertThat(statusOf(sent.id())).isEqualTo("ACCEPTED");
-		assertThat(invitationService.received(invitee)).isEmpty();
+		assertThat(allReceived(invitee)).isEmpty();
 	}
 
 	@Test
@@ -467,8 +467,8 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 
 		assertThat(statusOf(sent.id())).isEqualTo("DECLINED");
 		assertThat(responded(sent.id())).isTrue();
-		assertThat(invitationService.received(invitee)).isEmpty();
-		assertThat(invitationService.sent(leader, team.id())).isEmpty();
+		assertThat(allReceived(invitee)).isEmpty();
+		assertThat(allSent(leader, team.id())).isEmpty();
 		assertThat(isActiveMember(team.id(), invitee)).isFalse();
 		// 이미 응답한 초대는 다시 응답할 수 없다
 		assertApiError(() -> invitationService.accept(invitee, sent.id()), ErrorCode.NOT_FOUND);
@@ -505,11 +505,11 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		String invitationId = invited.data().path("inviteToTeam").path("id").asText();
 		assertThat(invited.data().path("inviteToTeam").path("invitee").path("id").asText()).isEqualTo(Long.toString(invitee));
 
-		JsonNode sent = gql(leader, TeamGql.SENT, Map.of("id", teamId)).data().path("sentTeamInvitations");
+		JsonNode sent = gql(leader, TeamGql.SENT, Map.of("id", teamId)).data().path("sentTeamInvitations").path("items");
 		assertThat(sent).hasSize(1);
 		assertThat(sent.get(0).path("id").asText()).isEqualTo(invitationId);
 
-		JsonNode received = gql(invitee, TeamGql.RECEIVED).data().path("receivedTeamInvitations");
+		JsonNode received = gql(invitee, TeamGql.RECEIVED).data().path("receivedTeamInvitations").path("items");
 		assertThat(received).hasSize(1);
 		assertThat(received.get(0).path("teamId").asText()).isEqualTo(teamId);
 		assertThat(received.get(0).path("teamName").asText()).isEqualTo("그래프큐엘 초대");

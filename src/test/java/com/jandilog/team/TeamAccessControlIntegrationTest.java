@@ -70,7 +70,7 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 			case "teamInviteCode" -> new Call(TeamGql.INVITE_CODE, Map.of("id", id));
 			case "sentTeamInvitations" -> new Call(TeamGql.SENT, Map.of("id", id));
 			case "createTeam" -> new Call(TeamGql.CREATE, Map.of("input", Map.of("name", "접근 거부 확인")));
-			case "updateTeam" -> new Call(TeamGql.UPDATE, Map.of("id", id, "input", Map.of("name", "바뀌면 안 되는 이름")));
+			case "updateTeam" -> new Call(TeamGql.UPDATE, Map.of("id", id, "input", Map.of("isPublic", false)));
 			case "joinTeamByCode" -> new Call(TeamGql.JOIN, Map.of("code", team.inviteCode()));
 			case "inviteToTeam" -> new Call(TeamGql.INVITE, Map.of("id", id, "login", loginOf(invitee)));
 			case "cancelTeamInvitation" -> new Call(TeamGql.CANCEL, Map.of("id", Long.toString(invitationId)));
@@ -122,6 +122,7 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 		// 거부된 호출은 아무것도 바꾸지 못한다
 		assertThat(activeMemberCount(team.id())).isEqualTo(2);
 		assertThat(teamRow(team.id()).get("name")).isEqualTo("접근 팀");
+		assertThat(teamRow(team.id()).get("is_public")).isIn(true, 1);
 		assertThat(teamRow(team.id()).get("deleted_at")).isNull();
 		assertThat(invitationRows(team.id(), invitee)).hasSize(1);
 	}
@@ -214,6 +215,7 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 
 		assertThat(((Number) teamRow(team.id()).get("leader_id")).longValue()).isEqualTo(leader);
 		assertThat(teamRow(team.id()).get("name")).isEqualTo("접근 팀");
+		assertThat(teamRow(team.id()).get("is_public")).isIn(true, 1);
 		assertThat(teamRow(team.id()).get("deleted_at")).isNull();
 		assertThat(isActiveMember(team.id(), teammate)).isTrue();
 		assertThat(invitationRows(team.id(), invitee)).extracting(r -> r.get("status")).containsExactly("PENDING");
@@ -256,8 +258,8 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 
 	@Test
 	void 받은_초대와_내_팀_목록은_호출한_본인_것만_돌려준다() {
-		assertThat(gql(invitee, TeamGql.RECEIVED).data().path("receivedTeamInvitations")).hasSize(1);
-		assertThat(gql(outsider, TeamGql.RECEIVED).data().path("receivedTeamInvitations")).isEmpty();
+		assertThat(gql(invitee, TeamGql.RECEIVED).data().path("receivedTeamInvitations").path("items")).hasSize(1);
+		assertThat(gql(outsider, TeamGql.RECEIVED).data().path("receivedTeamInvitations").path("items")).isEmpty();
 		assertThat(gql(outsider, TeamGql.MY_TEAMS).data().path("myTeams")).isEmpty();
 		assertThat(gql(teammate, TeamGql.MY_TEAMS).data().path("myTeams")).hasSize(1);
 		assertThat(gql(leader, TeamGql.MY_TEAMS).data().path("myTeams")).hasSize(2);

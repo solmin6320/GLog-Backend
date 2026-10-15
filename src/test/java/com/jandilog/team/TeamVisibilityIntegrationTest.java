@@ -17,74 +17,51 @@ import com.jandilog.team.support.TeamGql;
 import com.jandilog.team.support.TeamIntegrationTest;
 import com.jandilog.testsupport.auth.GraphQlHttpClient.GraphQlResponse;
 
-// 팀 정보 수정과 공개 설정에 따른 표시 (기능명세서 2장 "공개 설정" 표, 화면설계서 TM-06 ⑦, E-23)
+// 팀 공개 설정 변경과 공개 설정에 따른 표시 (기능명세서 2장 "공개 설정" 표, 화면설계서 TM-06 ⑦, E-23)
 class TeamVisibilityIntegrationTest extends TeamIntegrationTest {
 
 	private static final String POST = "query($id: ID!) { post(id: $id) { id teamId teamName } }";
 
-	// ----- 정보 수정 -----
+	// ----- 공개 설정 변경 -----
 
 	@Test
-	void 보낸_항목만_바꾸고_나머지는_그대로_둔다() {
+	void 공개_설정만_바뀌고_이름과_소개는_그대로다() {
 		long leader = member();
 		CreatedTeam team = newTeam(leader, "원래 이름", "원래 소개", true);
 
-		TeamResponse renamed = teamService.update(leader, team.id(), new UpdateTeamInput("바뀐 이름", null, null));
-		assertThat(renamed.name()).isEqualTo("바뀐 이름");
-		assertThat(renamed.description()).isEqualTo("원래 소개");
-		assertThat(renamed.isPublic()).isTrue();
-
-		TeamResponse described = teamService.update(leader, team.id(), new UpdateTeamInput(null, "바뀐 소개", null));
-		assertThat(described.name()).isEqualTo("바뀐 이름");
-		assertThat(described.description()).isEqualTo("바뀐 소개");
-
-		TeamResponse hidden = teamService.update(leader, team.id(), new UpdateTeamInput(null, null, false));
+		TeamResponse hidden = teamService.update(leader, team.id(), new UpdateTeamInput(false));
 		assertThat(hidden.isPublic()).isFalse();
-		assertThat(hidden.name()).isEqualTo("바뀐 이름");
-		assertThat(hidden.description()).isEqualTo("바뀐 소개");
+		assertThat(hidden.name()).isEqualTo("원래 이름");
+		assertThat(hidden.description()).isEqualTo("원래 소개");
 
 		Map<String, Object> row = teamRow(team.id());
-		assertThat(row.get("name")).isEqualTo("바뀐 이름");
-		assertThat(row.get("description")).isEqualTo("바뀐 소개");
+		assertThat(row.get("name")).isEqualTo("원래 이름");
+		assertThat(row.get("description")).isEqualTo("원래 소개");
 		assertThat(row.get("is_public")).isIn(false, 0);
+
+		TeamResponse shown = teamService.update(leader, team.id(), new UpdateTeamInput(true));
+		assertThat(shown.isPublic()).isTrue();
+		assertThat(teamRow(team.id()).get("is_public")).isIn(true, 1);
 	}
 
 	@Test
-	void 소개를_빈_문자열로_보내면_비워진다() {
+	void 같은_값으로_다시_바꿔도_오류_없이_그대로다() {
 		long leader = member();
-		CreatedTeam team = newTeam(leader, "소개 지우기", "지울 소개", true);
+		CreatedTeam team = newTeam(leader, "그대로", "소개", false);
 
-		TeamResponse response = teamService.update(leader, team.id(), new UpdateTeamInput(null, "", null));
+		TeamResponse response = teamService.update(leader, team.id(), new UpdateTeamInput(false));
 
-		assertThat(response.description()).isNull();
-		assertThat(teamRow(team.id()).get("description")).isNull();
+		assertThat(response.isPublic()).isFalse();
+		assertThat(teamRow(team.id()).get("is_public")).isIn(false, 0);
 	}
 
 	@Test
-	void 잘못된_이름과_소개는_거부하고_아무것도_바꾸지_않는다() {
-		long leader = member();
-		CreatedTeam team = newTeam(leader, "그대로", "소개", true);
-
-		assertApiError(() -> teamService.update(leader, team.id(), new UpdateTeamInput("   ", "새 소개", false)),
-				ErrorCode.TEAM_NAME_REQUIRED);
-		assertApiError(() -> teamService.update(leader, team.id(), new UpdateTeamInput("가".repeat(21), null, null)),
-				ErrorCode.INVALID_INPUT);
-		assertApiError(() -> teamService.update(leader, team.id(), new UpdateTeamInput(null, "소".repeat(101), null)),
-				ErrorCode.INVALID_INPUT);
-
-		Map<String, Object> row = teamRow(team.id());
-		assertThat(row.get("name")).isEqualTo("그대로");
-		assertThat(row.get("description")).isEqualTo("소개");
-		assertThat(row.get("is_public")).isIn(true, 1);
-	}
-
-	@Test
-	void 수정해도_초대코드와_팀장과_소속은_바뀌지_않는다() {
+	void 바꿔도_초대코드와_팀장과_소속은_바뀌지_않는다() {
 		long leader = member();
 		CreatedTeam team = newTeam(leader);
 		long teammate = joinedMember(team);
 
-		teamService.update(leader, team.id(), new UpdateTeamInput("새 이름", "새 소개", false));
+		teamService.update(leader, team.id(), new UpdateTeamInput(false));
 
 		Map<String, Object> row = teamRow(team.id());
 		assertThat(row.get("invite_code")).isEqualTo(team.inviteCode());
@@ -94,7 +71,7 @@ class TeamVisibilityIntegrationTest extends TeamIntegrationTest {
 	}
 
 	@Test
-	void updateTeam은_GraphQL로_보낸_항목만_바꾼다() {
+	void updateTeam은_GraphQL로_공개_설정만_바꾼다() {
 		long leader = member();
 		CreatedTeam team = newTeam(leader, "원래 이름", "원래 소개", true);
 		String id = Long.toString(team.id());
@@ -104,14 +81,28 @@ class TeamVisibilityIntegrationTest extends TeamIntegrationTest {
 		assertThat(onlyPrivate.data().path("updateTeam").path("isPublic").asBoolean()).isFalse();
 		assertThat(onlyPrivate.data().path("updateTeam").path("name").asText()).isEqualTo("원래 이름");
 		assertThat(onlyPrivate.data().path("updateTeam").path("description").asText()).isEqualTo("원래 소개");
+	}
 
-		GraphQlResponse cleared = gql(leader, TeamGql.UPDATE, Map.of("id", id, "input", Map.of("description", "")));
-		assertGraphQlOk(cleared);
-		assertThat(cleared.data().path("updateTeam").path("description").isNull()).isTrue();
-		assertThat(cleared.data().path("updateTeam").path("isPublic").asBoolean()).isFalse();
+	@Test
+	void updateTeam_입력에는_이름_소개가_없고_공개_설정이_빠지면_거부한다() {
+		long leader = member();
+		CreatedTeam team = newTeam(leader, "원래 이름", "원래 소개", true);
+		String id = Long.toString(team.id());
 
-		assertGraphQlError(gql(leader, TeamGql.UPDATE, Map.of("id", id, "input", Map.of("name", ""))),
-				ErrorCode.TEAM_NAME_REQUIRED);
+		GraphQlResponse withName = gql(leader, TeamGql.UPDATE,
+				Map.of("id", id, "input", Map.of("isPublic", false, "name", "바뀌면 안 되는 이름")));
+		GraphQlResponse withDescription = gql(leader, TeamGql.UPDATE,
+				Map.of("id", id, "input", Map.of("isPublic", false, "description", "바뀌면 안 되는 소개")));
+		GraphQlResponse withoutVisibility = gql(leader, TeamGql.UPDATE, Map.of("id", id, "input", Map.of()));
+
+		for (GraphQlResponse response : List.of(withName, withDescription, withoutVisibility)) {
+			assertThat(response.hasErrors()).as(response.rawBody()).isTrue();
+			assertThat(response.dataIsNull()).isTrue();
+		}
+		Map<String, Object> row = teamRow(team.id());
+		assertThat(row.get("name")).isEqualTo("원래 이름");
+		assertThat(row.get("description")).isEqualTo("원래 소개");
+		assertThat(row.get("is_public")).isIn(true, 1);
 	}
 
 	// ----- 소속 팀원에게는 항상 실제 이름 -----
@@ -127,8 +118,8 @@ class TeamVisibilityIntegrationTest extends TeamIntegrationTest {
 		assertThat(teamService.get(teammate, team.id()).name()).isEqualTo("비공개여도 보이는 이름");
 		assertThat(teamService.get(leader, team.id()).name()).isEqualTo("비공개여도 보이는 이름");
 		assertThat(teamService.myTeams(teammate)).extracting(TeamResponse::name).containsExactly("비공개여도 보이는 이름");
-		assertThat(teamService.members(teammate, team.id())).extracting(TeamMemberResponse::id).containsExactly(leader, teammate);
-		assertThat(invitationService.received(invitee)).extracting(ReceivedInvitationResponse::teamName)
+		assertThat(allMembers(teammate, team.id())).extracting(TeamMemberResponse::id).containsExactly(leader, teammate);
+		assertThat(allReceived(invitee)).extracting(ReceivedInvitationResponse::teamName)
 				.containsExactly("비공개여도 보이는 이름");
 	}
 
@@ -154,11 +145,11 @@ class TeamVisibilityIntegrationTest extends TeamIntegrationTest {
 		CreatedTeam team = newTeam(leader, "토글 팀", null, true);
 		assertThat(nameService.visibleNames(List.of(team.id()))).containsEntry(team.id(), "토글 팀");
 
-		teamService.update(leader, team.id(), new UpdateTeamInput(null, null, false));
+		teamService.update(leader, team.id(), new UpdateTeamInput(false));
 		assertThat(nameService.visibleNames(List.of(team.id()))).isEmpty();
 
-		teamService.update(leader, team.id(), new UpdateTeamInput("토글 팀 2", null, true));
-		assertThat(nameService.visibleNames(List.of(team.id()))).containsEntry(team.id(), "토글 팀 2");
+		teamService.update(leader, team.id(), new UpdateTeamInput(true));
+		assertThat(nameService.visibleNames(List.of(team.id()))).containsEntry(team.id(), "토글 팀");
 	}
 
 	@Test

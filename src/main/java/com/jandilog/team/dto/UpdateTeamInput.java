@@ -1,5 +1,5 @@
 package com.jandilog.team.dto;
 
-// 보낸 항목만 바꾼다. 소개를 비우려면 빈 문자열을 보낸다
-public record UpdateTeamInput(String name, String description, Boolean isPublic) {
+// 팀장이 바꿀 수 있는 것은 공개 설정뿐이다 (기능명세서 2장 공개 설정, 화면설계서 TM-06 ⑦)
+public record UpdateTeamInput(boolean isPublic) {
 }

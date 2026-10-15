@@ -52,7 +52,7 @@ class TeamKickIntegrationTest extends TeamIntegrationTest {
 		assertThat(activeMemberCount(team.id())).isEqualTo(2);
 		assertThat(teamService.myTeams(kicked)).isEmpty();
 		assertApiError(() -> teamService.get(kicked, team.id()), ErrorCode.FORBIDDEN);
-		assertThat(teamService.members(stays, team.id())).extracting(TeamMemberResponse::id)
+		assertThat(allMembers(stays, team.id())).extracting(TeamMemberResponse::id)
 				.containsExactly(leader, stays);
 	}
 

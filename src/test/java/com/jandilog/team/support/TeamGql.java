@@ -13,13 +13,16 @@ public final class TeamGql {
 
 	public static final String TEAM = "query($id: ID!) { team(id: $id) { " + TEAM_FIELDS + " } }";
 
-	public static final String TEAM_MEMBERS = "query($id: ID!) { teamMembers(teamId: $id) { id nickname githubLogin isLeader joinedAt } }";
+	public static final String TEAM_MEMBERS = "query($id: ID!, $after: String) { teamMembers(teamId: $id, after: $after) { "
+			+ "items { id nickname githubLogin isLeader joinedAt } nextCursor } }";
 
 	public static final String INVITE_CODE = "query($id: ID!) { teamInviteCode(teamId: $id) }";
 
-	public static final String RECEIVED = "{ receivedTeamInvitations { id teamId teamName createdAt inviter { id githubLogin } } }";
+	public static final String RECEIVED = "query($after: String) { receivedTeamInvitations(after: $after) { "
+			+ "items { id teamId teamName createdAt inviter { id githubLogin } } nextCursor } }";
 
-	public static final String SENT = "query($id: ID!) { sentTeamInvitations(teamId: $id) { id createdAt invitee { id githubLogin } } }";
+	public static final String SENT = "query($id: ID!, $after: String) { sentTeamInvitations(teamId: $id, after: $after) { "
+			+ "items { id createdAt invitee { id githubLogin } } nextCursor } }";
 
 	public static final String CREATE = "mutation($input: CreateTeamInput!) { createTeam(input: $input) { inviteCode team { "
 			+ TEAM_FIELDS + " } } }";
