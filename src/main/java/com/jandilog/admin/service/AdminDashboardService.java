@@ -101,9 +101,11 @@ public class AdminDashboardService {
 		Map<Long, Member> members = memberRepository
 				.findAllById(page.rows().stream().map(WeeklyJudgment::getMemberId).toList()).stream()
 				.collect(Collectors.toMap(Member::getId, Function.identity()));
+		Map<Long, WarningRecalcResult> warnings = recalculationService.calculateAll(members.keySet());
 		List<AdminJudgmentRow> items = page.rows().stream()
 				.filter(judgment -> members.containsKey(judgment.getMemberId()))
-				.map(judgment -> toRow(judgment, members.get(judgment.getMemberId())))
+				.map(judgment -> toRow(judgment, members.get(judgment.getMemberId()),
+						warnings.get(judgment.getMemberId())))
 				.toList();
 
 		return new AdminJudgmentPage(
@@ -148,8 +150,9 @@ public class AdminDashboardService {
 						HoldReason.IDENTITY_MISMATCH));
 	}
 
-	private AdminJudgmentRow toRow(WeeklyJudgment judgment, Member member) {
-		Integer warningCount = recalculationService.calculate(member.getId()) instanceof WarningRecalcResult.Calculated calculated
+	// 보류가 남은 회원은 경고 수를 알 수 없어 null (Q-03)
+	private static AdminJudgmentRow toRow(WeeklyJudgment judgment, Member member, WarningRecalcResult warning) {
+		Integer warningCount = warning instanceof WarningRecalcResult.Calculated calculated
 				? calculated.warningCount() : null;
 		return new AdminJudgmentRow(judgment.getId(), MemberBrief.from(member), judgment.getStatus(),
 				judgment.getSkipReason(), judgment.getHoldReason(), judgment.getVerifiedDays(),

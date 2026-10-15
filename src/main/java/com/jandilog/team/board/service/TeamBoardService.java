@@ -166,9 +166,10 @@ public class TeamBoardService {
 	private Map<Long, Integer> teamWarningCounts(long teamId, List<BoardMemberRow> rows) {
 		List<Long> memberIds = rows.stream().map(BoardMemberRow::memberId).toList();
 		Set<WarningWeek> teamWarnings = new HashSet<>(repository.findTeamWarnings(teamId, memberIds));
+		Map<Long, WarningRecalcResult> states = warningService.calculateAll(memberIds);
 		Map<Long, Integer> counts = new HashMap<>();
 		for (Long memberId : memberIds) {
-			if (warningService.calculate(memberId) instanceof WarningRecalcResult.Calculated state) {
+			if (states.get(memberId) instanceof WarningRecalcResult.Calculated state) {
 				counts.put(memberId, (int) state.activeWarningWeeks().stream()
 						.filter(week -> teamWarnings.contains(new WarningWeek(memberId, week))).count());
 			}
