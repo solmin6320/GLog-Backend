@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -57,21 +58,29 @@ public class WarningRecalculationService {
 	@Transactional
 	public WarningRecalcResult recalculate(long memberId) {
 		lockMember(memberId);
-		return compute(load(memberId), Map.of());
+		return compute(load(memberId), Map.of(), Set.of());
 	}
 
 	// 락 없이 읽기만 한다. 화면의 경고 수·연속 통과 표시용
 	@Transactional(readOnly = true)
 	public WarningRecalcResult calculate(long memberId) {
-		return compute(load(memberId), Map.of());
+		return compute(load(memberId), Map.of(), Set.of());
 	}
 
 	// 미리보기: hypothetical(주차 → 가정한 판정 상태)을 적용한 값과 지금 값을 비교한다. DB는 바꾸지 않는다.
 	// 소급 면제는 EXEMPT, 정정은 PASS/FAIL/EXEMPT를 가정한다. 이행 기준선 이전 주를 가정하면 값은 그대로다 (E-58)
 	@Transactional(readOnly = true)
 	public WarningRecalcPreview preview(long memberId, Map<LocalDate, JudgmentStatus> hypothetical) {
+		return preview(memberId, hypothetical, Set.of());
+	}
+
+	// 경고 복구 미리보기: restoredWarningWeeks에 든 주의 경고는 삭제 표시를 풀었다고 가정한다 (E-42)
+	@Transactional(readOnly = true)
+	public WarningRecalcPreview preview(long memberId, Map<LocalDate, JudgmentStatus> hypothetical,
+			Set<LocalDate> restoredWarningWeeks) {
 		History history = load(memberId);
-		return new WarningRecalcPreview(compute(history, Map.of()), compute(history, hypothetical));
+		return new WarningRecalcPreview(compute(history, Map.of(), Set.of()),
+				compute(history, hypothetical, restoredWarningWeeks));
 	}
 
 	private History load(long memberId) {
@@ -83,13 +92,15 @@ public class WarningRecalculationService {
 		return new History(judgments, warnings, baseline);
 	}
 
-	private WarningRecalcResult compute(History history, Map<LocalDate, JudgmentStatus> hypothetical) {
+	private WarningRecalcResult compute(History history, Map<LocalDate, JudgmentStatus> hypothetical,
+			Set<LocalDate> restoredWarningWeeks) {
 		Map<LocalDate, WeekEntry> entries = new TreeMap<>();
 		for (WeeklyJudgment judgment : history.judgments()) {
 			LocalDate week = judgment.getWeekStart();
 			JudgmentStatus status = hypothetical.getOrDefault(week, judgment.getStatus());
 			Warning warning = history.warnings().get(week);
-			entries.put(week, new WeekEntry(week, status, warning != null && !warning.isAlive()));
+			boolean deleted = warning != null && !warning.isAlive() && !restoredWarningWeeks.contains(week);
+			entries.put(week, new WeekEntry(week, status, deleted));
 		}
 		// 판정 행이 아직 없는 주를 가정한 경우도 한 주로 넣는다
 		hypothetical.forEach((week, status) -> entries.putIfAbsent(week, new WeekEntry(week, status, false)));
