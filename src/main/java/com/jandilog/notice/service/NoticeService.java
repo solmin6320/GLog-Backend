@@ -6,7 +6,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
@@ -135,23 +134,26 @@ public class NoticeService {
 		}
 
 		String encode() {
-			String raw = (pinned ? "P" : "N") + "|" + DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(createdAt) + "|" + id;
-			return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+			return CursorCodec.encode(
+					(pinned ? "P" : "N") + "|" + DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(createdAt) + "|" + id);
 		}
 
+		// 목록은 커서가 있을 때만 부른다. 비었거나 형식이 틀리면 INVALID_INPUT
 		static Cursor decode(String cursor) {
-			try {
-				String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+			String raw = CursorCodec.decode(cursor);
+			if (raw != null) {
 				String[] parts = raw.split("\\|", -1);
-				if (parts.length == 3 && (parts[0].equals("P") || parts[0].equals("N"))) {
-					long id = Long.parseLong(parts[2]);
-					if (id > 0) {
-						return new Cursor(parts[0].equals("P"),
-								LocalDateTime.parse(parts[1], DateTimeFormatter.ISO_LOCAL_DATE_TIME), id);
+				try {
+					if (parts.length == 3 && (parts[0].equals("P") || parts[0].equals("N"))) {
+						long id = Long.parseLong(parts[2]);
+						if (id > 0) {
+							return new Cursor(parts[0].equals("P"),
+									LocalDateTime.parse(parts[1], DateTimeFormatter.ISO_LOCAL_DATE_TIME), id);
+						}
 					}
+				} catch (NumberFormatException | DateTimeParseException e) {
+					// 아래에서 같은 오류로 처리
 				}
-			} catch (IllegalArgumentException | DateTimeParseException e) {
-				// 아래에서 같은 오류로 처리
 			}
 			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
