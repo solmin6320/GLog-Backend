@@ -79,6 +79,29 @@ public class WeeklyJudgment {
 		this.judgedAt = result.judgedAt();
 	}
 
+	// 소급 면제: 확정된 통과·미달 주를 면제로 바꾼다. 인증일·기록글 수와 일자별 근거는 그대로 둔다 (기능명세서 7장)
+	public void applyExemption(SkipReason reason) {
+		if (reason.status() != JudgmentStatus.EXEMPT) {
+			throw new IllegalArgumentException("면제 사유가 아니에요: " + reason);
+		}
+		this.status = JudgmentStatus.EXEMPT;
+		this.skipReason = reason;
+	}
+
+	// 관리자 정정: 결과를 바꾸고 정정 표시를 남긴다. 면제로 정정하면 skipReason을 함께 넘긴다 (기능명세서 7장)
+	public void correctTo(JudgmentStatus after, SkipReason skipReason) {
+		if (after != JudgmentStatus.PASS && after != JudgmentStatus.FAIL && after != JudgmentStatus.EXEMPT) {
+			throw new IllegalArgumentException("정정 결과는 통과·미달·면제만 가능해요: " + after);
+		}
+		if ((after == JudgmentStatus.EXEMPT) != (skipReason != null && skipReason.status() == after)) {
+			throw new IllegalArgumentException("결과와 skipReason이 맞지 않아요");
+		}
+		this.status = after;
+		this.skipReason = skipReason;
+		this.holdReason = null;
+		this.corrected = true;
+	}
+
 	// 자동 재시도 횟수. 상한(Q-07: 3회)과 간격은 호출한 쪽이 정한다
 	public void increaseRetryCount() {
 		this.retryCount++;
