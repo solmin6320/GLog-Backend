@@ -44,6 +44,15 @@ public class CommentRepository {
 		return mongo.find(query, Comment.class);
 	}
 
+	// 팀 댓글 관리용: 글 id 묶음에 달린 삭제되지 않은 댓글, 최신순. after보다 오래된 댓글부터 limit개 (DB명세서 4-6 2단계)
+	public List<Comment> findAlivePageByPostIds(Collection<ObjectId> postIds, ObjectId after, int limit) {
+		Criteria criteria = Criteria.where("postId").in(postIds).and("deletedAt").isNull();
+		if (after != null) {
+			criteria = criteria.and("_id").lt(after);
+		}
+		return mongo.find(Query.query(criteria).with(Sort.by(Sort.Direction.DESC, "_id")).limit(limit), Comment.class);
+	}
+
 	public Map<ObjectId, Integer> countAliveByPostIds(Collection<ObjectId> postIds) {
 		Aggregation aggregation = Aggregation.newAggregation(
 				Aggregation.match(Criteria.where("postId").in(postIds).and("deletedAt").isNull()),

@@ -8,3 +8,7 @@ out/
 .claude/skills/design-taste-frontend/
 .claude/skills/frontend-design/
 .claude/skills/ui-ux-pro-max/
+# 에이전트 작업 폴더(worktree)
+.claude/worktrees/
+# 기획서 원본(로컬 참고용)
+백엔드 기획서/

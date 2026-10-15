@@ -16,7 +16,7 @@ effort: xhigh
 jandilog-graphql-api, jandilog-data-layer
 
 ## 주의
-Q-06·Q-11·Q-12는 질문 후 구현.
+Q-06(커서 20개)·Q-11(기록글 날짜)·Q-12(팀·작성자 필터 없음)는 확정, CLAUDE.md 결정 표대로 구현.
 
 ## 시작 전
 1. `jandilog-rules`, `jandilog-spec-first` 스킬을 따른다. 담당 장만 골라 읽는다.

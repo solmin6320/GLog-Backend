@@ -1,10 +1,9 @@
 package com.jandilog.post.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Base64;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +15,8 @@ import org.springframework.stereotype.Service;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.post.domain.Post;
 import com.jandilog.post.domain.PostSections;
 import com.jandilog.post.domain.PostType;
@@ -26,6 +27,7 @@ import com.jandilog.post.dto.TagCount;
 import com.jandilog.post.dto.UpdatePostInput;
 import com.jandilog.post.repository.PostRepository;
 import com.jandilog.post.repository.PostSearchCondition;
+import com.jandilog.team.service.TeamAccessService;
 
 // 게시판 글 작성·수정·삭제·상세·목록 (기능명세서 3장).
 // 쓰기는 MongoDB를 먼저, post_index를 나중에 쓴다. 분산 트랜잭션은 쓰지 않고, 색인 쓰기가 실패하면
@@ -33,18 +35,21 @@ import com.jandilog.post.repository.PostSearchCondition;
 @Service
 public class PostService {
 
-	static final int PAGE_SIZE = 20;
+	static final int PAGE_SIZE = CursorCodec.PAGE_SIZE;
 	private static final int POPULAR_TAG_LIMIT = 10;
 
 	private static final Logger log = LoggerFactory.getLogger(PostService.class);
 
 	private final PostRepository postRepository;
 	private final PostIndexService postIndexService;
+	private final TeamAccessService teamAccess;
 	private final Clock clock;
 
-	public PostService(PostRepository postRepository, PostIndexService postIndexService, Clock clock) {
+	public PostService(PostRepository postRepository, PostIndexService postIndexService,
+			TeamAccessService teamAccess, Clock clock) {
 		this.postRepository = postRepository;
 		this.postIndexService = postIndexService;
+		this.teamAccess = teamAccess;
 		this.clock = clock;
 	}
 
@@ -56,8 +61,10 @@ public class PostService {
 		List<String> tags = PostInputRules.tags(input.tags());
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
 		Long teamId = PostInputRules.teamId(input.teamId());
+		// 지금 내가 소속인 삭제되지 않은 팀만 연결할 수 있다
+		teamAccess.requireLinkable(teamId, memberId);
 
-		Instant now = clock.instant();
+		Instant now = now();
 		// ObjectId 시각을 서버 시계에 맞춰 _id 순서와 createdAt 순서가 같게 한다
 		Post post = Post.create(new ObjectId(Date.from(now)), memberId, teamId, type, title, sections, tags, commitUrls,
 				LocalDate.now(clock), now);
@@ -72,18 +79,32 @@ public class PostService {
 		return PostResponse.from(post);
 	}
 
-	// 수정해도 작성일·종류는 그대로이고, 기록글 여부는 새 본문 기준으로 다시 계산한다 (Q-11)
+	// 수정해도 작성일·종류는 그대로이고, 기록글 여부는 새 본문 기준으로 다시 계산한다 (Q-11).
+	// 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장이 고칠 수 있다 (기능명세서 2장, BD-04)
 	public PostResponse update(long memberId, String postId, UpdatePostInput input) {
 		Post current = loadAlive(postId);
-		requireAuthor(current, memberId);
+		boolean author = current.getAuthorId() == memberId;
+		if (!author && !teamAccess.isLeaderOfAliveTeam(current.getTeamId(), memberId)) {
+			throw new ApiException(ErrorCode.FORBIDDEN);
+		}
 
 		String title = PostInputRules.title(input.title());
 		PostSections sections = PostInputRules.sections(current.getType(), input.sections());
 		List<String> tags = PostInputRules.tags(input.tags());
 		List<String> commitUrls = PostInputRules.commitUrls(input.commitUrls());
-		Long teamId = PostInputRules.teamId(input.teamId());
+		Long teamId;
+		if (author) {
+			teamId = PostInputRules.teamId(input.teamId());
+			// 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않는다(팀에서 나간 뒤에도 내용은 고칠 수 있게). 새로 연결하거나 바꿀 때만 소속을 본다
+			if (teamId != null && !teamId.equals(current.getTeamId())) {
+				teamAccess.requireLinkable(teamId, memberId);
+			}
+		} else {
+			// 팀장은 남의 글의 팀 연결을 바꾸지 못한다 (BD-04 ⑨ 비활성). 입력의 teamId는 읽지 않고 기존 연결을 유지한다
+			teamId = current.getTeamId();
+		}
 
-		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, clock.instant());
+		Post replacement = current.edited(teamId, title, sections, tags, commitUrls, now());
 		// 그 사이 삭제됐으면 바뀌지 않는다 (EX-BD04-02)
 		Optional<Post> previous = postRepository.replaceIfAlive(replacement);
 		if (previous.isEmpty()) {
@@ -103,7 +124,7 @@ public class PostService {
 		Post current = loadAlive(postId);
 		requireAuthor(current, memberId);
 
-		if (!postRepository.softDelete(current.getId(), clock.instant())) {
+		if (!postRepository.softDelete(current.getId(), now())) {
 			throw new ApiException(ErrorCode.POST_DELETED);
 		}
 		try {
@@ -127,10 +148,9 @@ public class PostService {
 
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 		List<Post> rows = postRepository.findPage(condition, after, PAGE_SIZE + 1);
-		boolean hasNext = rows.size() > PAGE_SIZE;
-		List<Post> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getId()) : null;
-		return new PostPageResponse(page.stream().map(PostResponse::from).toList(), nextCursor, condition);
+		PageSlice<Post> page = PageSlice.of(rows, last -> encodeCursor(last.getId()));
+		return new PostPageResponse(page.rows().stream().map(PostResponse::from).toList(), page.nextCursor(),
+				condition);
 	}
 
 	public int count(PostSearchCondition condition) {
@@ -153,6 +173,11 @@ public class PostService {
 		return post;
 	}
 
+	// Mongo는 밀리초까지만 저장하므로 응답에 싣는 시각도 밀리초로 맞춘다
+	private Instant now() {
+		return clock.instant().truncatedTo(ChronoUnit.MILLIS);
+	}
+
 	static ObjectId parseId(String id) {
 		if (id == null || !ObjectId.isValid(id)) {
 			throw new ApiException(ErrorCode.NOT_FOUND);
@@ -160,7 +185,14 @@ public class PostService {
 		return new ObjectId(id);
 	}
 
-	// 글 수정·삭제는 작성자 본인만. 팀장·관리자 권한은 팀 모듈·관리자 모듈에서 따로 붙인다
+	// 글이 연결된 팀의 현재 팀장인가. 댓글 수정 권한 판단에 쓴다.
+	// 삭제된 글도 연결이 남아 있으면 true로 두어, 팀장에게는 이후 단계가 POST_DELETED로 알린다 (EX-BD03-02)
+	public boolean isLinkedTeamLeader(ObjectId postId, long memberId) {
+		return postRepository.findById(postId)
+				.map(post -> teamAccess.isLeaderOfAliveTeam(post.getTeamId(), memberId)).orElse(false);
+	}
+
+	// 글 삭제는 작성자 본인만(팀장은 수정만 가능, 관리자 삭제는 관리자 모듈에서 따로 붙인다)
 	private static void requireAuthor(Post post, long memberId) {
 		if (post.getAuthorId() != memberId) {
 			throw new ApiException(ErrorCode.FORBIDDEN);
@@ -194,25 +226,21 @@ public class PostService {
 		}
 	}
 
-	// 커서는 마지막 글의 ObjectId를 Base64url로 감싼 불투명 문자열
-	static String encodeCursor(ObjectId lastId) {
-		return Base64.getUrlEncoder().withoutPadding()
-				.encodeToString(lastId.toHexString().getBytes(StandardCharsets.UTF_8));
+	// 커서는 마지막 글의 ObjectId를 감싼 불투명 문자열. 관리자 게시물 목록도 같은 형식을 쓴다
+	public static String encodeCursor(ObjectId lastId) {
+		return CursorCodec.encode(lastId.toHexString());
 	}
 
-	static ObjectId decodeCursor(String cursor) {
-		if (cursor == null || cursor.isEmpty()) {
+	// 커서가 없으면 null, 형식이 틀리면 잘못된 입력
+	public static ObjectId decodeCursor(String cursor) {
+		String hex = CursorCodec.decode(cursor);
+		if (hex == null) {
 			return null;
 		}
-		try {
-			String hex = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-			if (ObjectId.isValid(hex)) {
-				return new ObjectId(hex);
-			}
-		} catch (IllegalArgumentException e) {
-			// 아래에서 같은 오류로 처리
+		if (!ObjectId.isValid(hex)) {
+			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
-		throw new ApiException(ErrorCode.INVALID_INPUT);
+		return new ObjectId(hex);
 	}
 
 }

@@ -2,6 +2,7 @@ package com.jandilog.post.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -19,7 +20,7 @@ import com.jandilog.post.domain.Post;
 import com.jandilog.post.dto.CommentResponse;
 import com.jandilog.post.repository.CommentRepository;
 
-// 댓글 작성·수정·삭제와 글 상세의 댓글 목록 (기능명세서 3장). 1단계 댓글이고, 수정·삭제는 작성자 본인만
+// 댓글 작성·수정·삭제와 글 상세의 댓글 목록 (기능명세서 3장). 1단계 댓글이고, 삭제는 작성자 본인만, 수정은 팀장도 가능
 @Service
 public class CommentService {
 
@@ -37,19 +38,22 @@ public class CommentService {
 	public CommentResponse create(long memberId, String postId, String content) {
 		Post post = postService.loadAlive(postId);
 		String text = PostInputRules.commentContent(content);
-		Instant now = clock.instant();
+		Instant now = now();
 		Comment comment = Comment.create(new ObjectId(Date.from(now)), post.getId(), memberId, text, now);
 		commentRepository.insert(comment);
 		return CommentResponse.from(comment);
 	}
 
+	// 작성자 본인 또는 그 글이 연결된 팀의 현재 팀장이 고칠 수 있다 (기능명세서 2장, BD-03 ⑪)
 	public CommentResponse update(long memberId, String commentId, String content) {
 		Comment comment = loadAlive(commentId);
-		requireAuthor(comment, memberId);
+		if (comment.getAuthorId() != memberId && !postService.isLinkedTeamLeader(comment.getPostId(), memberId)) {
+			throw new ApiException(ErrorCode.FORBIDDEN);
+		}
 		postService.loadAlive(comment.getPostId().toHexString());
 		String text = PostInputRules.commentContent(content);
 
-		if (!commentRepository.updateContentIfAlive(comment.getId(), text, clock.instant())) {
+		if (!commentRepository.updateContentIfAlive(comment.getId(), text, now())) {
 			throw new ApiException(ErrorCode.NOT_FOUND);
 		}
 		return CommentResponse.from(loadAlive(commentId));
@@ -61,7 +65,7 @@ public class CommentService {
 		requireAuthor(comment, memberId);
 		postService.loadAlive(comment.getPostId().toHexString());
 
-		if (!commentRepository.softDelete(comment.getId(), clock.instant())) {
+		if (!commentRepository.softDelete(comment.getId(), now())) {
 			throw new ApiException(ErrorCode.NOT_FOUND);
 		}
 	}
@@ -78,6 +82,11 @@ public class CommentService {
 
 	public Map<ObjectId, Integer> countByPostIds(Collection<ObjectId> postIds) {
 		return commentRepository.countAliveByPostIds(postIds);
+	}
+
+	// Mongo는 밀리초까지만 저장하므로 응답에 싣는 시각도 밀리초로 맞춘다
+	private Instant now() {
+		return clock.instant().truncatedTo(ChronoUnit.MILLIS);
 	}
 
 	// 없거나 삭제된 댓글은 모두 없는 내용(E-53)으로 본다

@@ -22,6 +22,7 @@ import com.jandilog.admin.repository.AdminJudgmentQueryRepository;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.common.time.KstFormats;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.exemption.domain.PersonalExemptionStatus;
@@ -95,14 +96,12 @@ public class AdminDashboardService {
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다
 		List<WeeklyJudgment> rows = judgmentQueryRepository.findResultPage(week, effective.statuses(),
 				InputRules.likePattern(InputRules.keyword(keyword)), afterId, PageRequest.of(0, CursorCodec.PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<WeeklyJudgment> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).getId()) : null;
+		PageSlice<WeeklyJudgment> page = PageSlice.of(rows, last -> CursorCodec.encode(last.getId()));
 
 		Map<Long, Member> members = memberRepository
-				.findAllById(page.stream().map(WeeklyJudgment::getMemberId).toList()).stream()
+				.findAllById(page.rows().stream().map(WeeklyJudgment::getMemberId).toList()).stream()
 				.collect(Collectors.toMap(Member::getId, Function.identity()));
-		List<AdminJudgmentRow> items = page.stream()
+		List<AdminJudgmentRow> items = page.rows().stream()
 				.filter(judgment -> members.containsKey(judgment.getMemberId()))
 				.map(judgment -> toRow(judgment, members.get(judgment.getMemberId())))
 				.toList();
@@ -118,7 +117,7 @@ public class AdminDashboardService {
 						SkipReason.FIRST_WEEK),
 				(int) judgmentQueryRepository.countManualHoldsOfWeek(week, JudgmentStatus.HOLD,
 						HoldReason.IDENTITY_MISMATCH, WeeklyJudgment.MAX_AUTO_RETRIES),
-				items, nextCursor);
+				items, page.nextCursor());
 	}
 
 	// 모든 주의 사람이 봐야 하는 보류. 자동 재시도가 남은 건은 올리지 않는다 (AD-01 ⑨)
@@ -131,20 +130,18 @@ public class AdminDashboardService {
 		List<WeeklyJudgment> rows = judgmentQueryRepository.findManualHoldPage(JudgmentStatus.HOLD,
 				HoldReason.IDENTITY_MISMATCH, WeeklyJudgment.MAX_AUTO_RETRIES, afterId,
 				PageRequest.of(0, CursorCodec.PAGE_SIZE + 1));
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<WeeklyJudgment> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).getId()) : null;
+		PageSlice<WeeklyJudgment> page = PageSlice.of(rows, last -> CursorCodec.encode(last.getId()));
 
 		Map<Long, Member> members = memberRepository
-				.findAllById(page.stream().map(WeeklyJudgment::getMemberId).toList()).stream()
+				.findAllById(page.rows().stream().map(WeeklyJudgment::getMemberId).toList()).stream()
 				.collect(Collectors.toMap(Member::getId, Function.identity()));
-		List<AdminHold> items = page.stream()
+		List<AdminHold> items = page.rows().stream()
 				.filter(judgment -> members.containsKey(judgment.getMemberId()))
 				.map(judgment -> new AdminHold(MemberBrief.from(members.get(judgment.getMemberId())),
 						judgment.getWeekStart().toString(), judgment.getHoldReason(), judgment.getRetryCount(),
 						judgment.getRetryCount() >= WeeklyJudgment.MAX_AUTO_RETRIES))
 				.toList();
-		return new AdminHoldPage(items, nextCursor,
+		return new AdminHoldPage(items, page.nextCursor(),
 				(int) judgmentQueryRepository.countManualHolds(JudgmentStatus.HOLD, HoldReason.IDENTITY_MISMATCH,
 						WeeklyJudgment.MAX_AUTO_RETRIES),
 				(int) judgmentQueryRepository.countIdentityMismatchHolds(JudgmentStatus.HOLD,

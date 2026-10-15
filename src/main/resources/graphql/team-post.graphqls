@@ -1,0 +1,21 @@
+# 팀 글 관리 (기능명세서 2장, TM-06 ⑧): 팀에 연결된 글·댓글 목록. 그 팀의 팀장만 호출할 수 있고 관리자도 예외 없다
+# (비소속·비팀장 FORBIDDEN, 없는/삭제된 팀 NOT_FOUND). 삭제된 글·댓글은 나오지 않는다. 수정은 updatePost·updateComment를 쓴다
+
+extend type Query {
+    "팀에 연결된 글 목록 (TM-06 ⑧). 팀장만. 최신순, 커서 기반 20개"
+    teamPosts(teamId: ID!, "이전 페이지의 nextCursor" after: String): TeamPostPage!
+    "팀에 연결된 글에 달린 댓글 목록 (TM-06 ⑧). 팀장만. 최신순, 커서 기반 20개. 댓글이 달린 글은 postId로 안다"
+    teamComments(teamId: ID!, "이전 페이지의 nextCursor" after: String): TeamCommentPage!
+}
+
+type TeamPostPage {
+    items: [Post!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}
+
+type TeamCommentPage {
+    items: [Comment!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}

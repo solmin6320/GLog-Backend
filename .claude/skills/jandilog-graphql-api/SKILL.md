@@ -9,10 +9,10 @@ description: 잔디로그 GraphQL API·인증·권한 구현 규칙. 스키마(.
 - 엔드포인트 `/graphql` 하나. **이미지 업로드만 REST multipart**(프로필, S3).
 - 스키마 파일 `src/main/resources/graphql/*.graphqls`, 도메인별 분리. **3주차 말 동결**: 이후 변경은 사용자 승인.
 - 리졸버 `@Controller` + `@QueryMapping`/`@MutationMapping`. 목록의 작성자·댓글 수 등은 **`@BatchMapping`** 으로 N+1 방지.
-- 페이지네이션 모양은 **Q-06 미결** → 목록 쿼리 만들기 전에 질문.
+- 페이지네이션은 커서 기반 20개, `{items, nextCursor}` (Q-06 확정).
 
 ## 인증·권한
-- GitHub OAuth2 → 백엔드 콜백 한 곳 → **일회용 코드(Redis 60초)** 발급 → 토큰 교환. 토큰을 URL에 싣지 않는다. 웹은 웹 주소, 앱은 딥링크(`jandilog://auth?code=`, 제안)로 복귀.
+- GitHub OAuth2 → 백엔드 콜백 한 곳 → **일회용 코드(Redis 60초)** 발급 → 토큰 교환. 토큰을 URL에 싣지 않는다. 웹은 웹 주소, 앱은 딥링크(기본값 `com.jandilog.app://auth`, 설정으로 변경 가능)로 복귀.
 - 상태: `PENDING`(승인 대기, AU-03만 접근) / `ACTIVE` / `REJECTED`(토큰 미발급, E-02). 역할 `MEMBER`/`ADMIN`.
 - 권한은 **`@PreAuthorize` 메서드 단위.** 팀장 전용(팀 관리·개인 면제 요청)은 팀 컨텍스트로 검사. 관리자라도 남의 팀 현황판·팀 관리 불가.
 - CORS는 웹 도메인만. JWT 만료 → 인증 오류(E-03).

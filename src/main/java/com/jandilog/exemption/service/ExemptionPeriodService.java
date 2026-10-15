@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.exemption.domain.ExemptionPeriod;
 import com.jandilog.exemption.dto.ExemptionPeriodInput;
@@ -63,10 +64,9 @@ public class ExemptionPeriodService {
 		List<ExemptionPeriod> rows = raw == null
 				? periodRepository.findAllByOrderByWeekStartDesc(pageable)
 				: periodRepository.findByWeekStartLessThanOrderByWeekStartDesc(parseCursor(raw), pageable);
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<ExemptionPeriod> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? CursorCodec.encode(page.get(page.size() - 1).getWeekStart().toString()) : null;
-		return new ExemptionPeriodPage(page.stream().map(ExemptionPeriodResponse::from).toList(), nextCursor);
+		PageSlice<ExemptionPeriod> page = PageSlice.of(rows, last -> CursorCodec.encode(last.getWeekStart().toString()));
+		return new ExemptionPeriodPage(page.rows().stream().map(ExemptionPeriodResponse::from).toList(),
+				page.nextCursor());
 	}
 
 	// 그 주를 면제 기간으로 두면 바뀌는 판정과 영향. 아무것도 바꾸지 않는다

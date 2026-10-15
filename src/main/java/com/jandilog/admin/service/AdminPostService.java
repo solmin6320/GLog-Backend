@@ -1,10 +1,8 @@
 package com.jandilog.admin.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -31,6 +29,7 @@ import com.jandilog.admin.repository.AdminPostQueryRepository;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.common.time.KstFormats;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.member.domain.Member;
@@ -86,7 +85,7 @@ public class AdminPostService {
 	public AdminPostPage list(AdminPostFilter filter, String keyword, String cursor) {
 		AdminPostFilter effective = filter == null ? AdminPostFilter.ALL : filter;
 		String term = InputRules.keyword(keyword);
-		ObjectId after = decodeCursor(cursor);
+		ObjectId after = PostService.decodeCursor(cursor);
 		List<Long> authorIds = term == null ? List.of()
 				: memberLookupRepository.findIdsByKeyword(InputRules.likePattern(term),
 						PageRequest.of(0, AUTHOR_MATCH_LIMIT));
@@ -103,13 +102,11 @@ public class AdminPostService {
 		comments.forEach(comment -> rows.add(new Row(comment.getId(), null, comment)));
 		rows.sort(Comparator.comparing((Row row) -> row.id()).reversed());
 
-		boolean hasNext = rows.size() > CursorCodec.PAGE_SIZE;
-		List<Row> page = hasNext ? rows.subList(0, CursorCodec.PAGE_SIZE) : rows;
-		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).id()) : null;
+		PageSlice<Row> page = PageSlice.of(rows, last -> PostService.encodeCursor(last.id()));
 
 		Set<Long> authorIdsOnPage = new HashSet<>();
 		Set<ObjectId> parentPostIds = new HashSet<>();
-		for (Row row : page) {
+		for (Row row : page.rows()) {
 			authorIdsOnPage.add(row.post() != null ? row.post().getAuthorId() : row.comment().getAuthorId());
 			if (row.comment() != null) {
 				parentPostIds.add(row.comment().getPostId());
@@ -119,8 +116,8 @@ public class AdminPostService {
 				.collect(Collectors.toMap(Member::getId, Function.identity()));
 		Map<ObjectId, String> titles = queryRepository.findPostTitles(parentPostIds);
 
-		List<AdminPostItem> items = page.stream().map(row -> toItem(row, members, titles)).toList();
-		return new AdminPostPage(items, nextCursor);
+		List<AdminPostItem> items = page.rows().stream().map(row -> toItem(row, members, titles)).toList();
+		return new AdminPostPage(items, page.nextCursor());
 	}
 
 	// 관리자 글 삭제. 이미 삭제된 글은 POST_DELETED, 없는 글은 NOT_FOUND
@@ -191,23 +188,6 @@ public class AdminPostService {
 			throw new ApiException(ErrorCode.NOT_FOUND);
 		}
 		return new ObjectId(id.strip());
-	}
-
-	// 커서는 마지막 행의 ObjectId를 Base64url로 감싼 불투명 문자열
-	private static String encodeCursor(ObjectId lastId) {
-		return Base64.getUrlEncoder().withoutPadding()
-				.encodeToString(lastId.toHexString().getBytes(StandardCharsets.UTF_8));
-	}
-
-	private static ObjectId decodeCursor(String cursor) {
-		String hex = CursorCodec.decode(cursor);
-		if (hex == null) {
-			return null;
-		}
-		if (!ObjectId.isValid(hex)) {
-			throw new ApiException(ErrorCode.INVALID_INPUT);
-		}
-		return new ObjectId(hex);
 	}
 
 	private record Row(ObjectId id, Post post, Comment comment) {
