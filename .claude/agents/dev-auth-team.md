@@ -16,7 +16,7 @@ effort: xhigh
 jandilog-graphql-api, jandilog-data-layer
 
 ## 주의
-Q-01·Q-02는 질문 후 구현.
+Q-01(초대코드 평문)·Q-02(재초대 복원)는 확정, CLAUDE.md 결정 표대로 구현.
 
 ## 시작 전
 1. `jandilog-rules`, `jandilog-spec-first` 스킬을 따른다. 담당 장만 골라 읽는다.

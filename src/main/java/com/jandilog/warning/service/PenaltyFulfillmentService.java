@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.jandilog.admin.domain.AdminActionLog;
@@ -39,12 +40,13 @@ public class PenaltyFulfillmentService {
 	}
 
 	// 회원 행을 잠그고 지금 벌칙 대상인지 다시 계산해 확인한 뒤 기록한다.
-	// 대상이 아니거나(이미 이행했거나 정정으로 빠짐) 보류 중이라 판단할 수 없으면 CONFLICT
-	@Transactional
+	// 대상이 아니거나(이미 이행했거나 정정으로 빠짐) 보류 중이라 판단할 수 없으면 NOT_PENALTY_TARGET.
+	// 두 관리자가 동시에 눌러도 락을 기다린 쪽은 먼저 커밋된 이행을 보고 거부된다
+	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public PenaltyFulfillment fulfill(long adminId, long memberId) {
 		WarningRecalcResult state = recalculationService.recalculate(memberId);
 		if (!(state instanceof WarningRecalcResult.Calculated calculated) || !calculated.penaltyTarget()) {
-			throw new ApiException(ErrorCode.CONFLICT);
+			throw new ApiException(ErrorCode.NOT_PENALTY_TARGET);
 		}
 		LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
 		PenaltyFulfillment fulfillment = fulfillmentRepository

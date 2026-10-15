@@ -1,0 +1,49 @@
+# 공지 (기능명세서 4장). 조회는 전체 회원, 작성·수정·삭제·고정은 관리자. 댓글 없음
+
+extend type Query {
+    "공지 목록. 고정 공지가 위, 그 아래 최신순. 커서 기반 20개"
+    notices(
+        "이전 페이지의 nextCursor"
+        after: String
+    ): NoticePage!
+    "공지 상세. 없는 공지는 NOT_FOUND"
+    notice(id: ID!): Notice!
+}
+
+extend type Mutation {
+    "공지를 작성한다 (관리자)"
+    createNotice(input: NoticeInput!): Notice!
+    "공지를 수정한다. isPinned를 생략하면 고정이 풀린다 (관리자)"
+    updateNotice(id: ID!, input: NoticeInput!): Notice!
+    "상단 고정을 켜고 끈다 (관리자)"
+    setNoticePinned(id: ID!, isPinned: Boolean!): Notice!
+    "공지를 삭제한다. 잔디 인정 규칙 공지(isSystem)는 SYSTEM_NOTICE_UNDELETABLE로 거부한다 (관리자)"
+    deleteNotice(id: ID!): Boolean!
+}
+
+input NoticeInput {
+    "1~200자"
+    title: String!
+    content: String!
+    "상단 고정. 기본 false"
+    isPinned: Boolean = false
+}
+
+type Notice {
+    id: ID!
+    title: String!
+    content: String!
+    isPinned: Boolean!
+    "잔디 인정 규칙 공지. 삭제할 수 없다"
+    isSystem: Boolean!
+    "작성 시각 (KST, ISO-8601)"
+    createdAt: String!
+    "수정 시각 (KST, ISO-8601). 수정 전에는 null"
+    updatedAt: String
+}
+
+type NoticePage {
+    items: [Notice!]!
+    "다음 페이지 커서. null이면 마지막"
+    nextCursor: String
+}

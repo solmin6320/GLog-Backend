@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -88,6 +89,31 @@ class OAuthLoginSuccessHandlerTest {
 
 		assertThat(location).isEqualTo("https://jandi.example.com/auth/callback?code=CODE");
 		verify(memberService, times(2)).loginWithGithub(100L, "octocat", "홍길동");
+	}
+
+	@Test
+	void 첫_로그인_저장이_데드락으로_실패하면_한_번_다시_조회해서_코드를_발급한다() throws IOException {
+		when(memberService.loginWithGithub(100L, "octocat", "홍길동"))
+				.thenThrow(new CannotAcquireLockException("Deadlock found when trying to get lock"))
+				.thenReturn(member(7L, MemberStatus.ACTIVE));
+		when(authCodeService.issue(7L)).thenReturn("CODE");
+
+		String location = run(attributes());
+
+		assertThat(location).isEqualTo("https://jandi.example.com/auth/callback?code=CODE");
+		verify(memberService, times(2)).loginWithGithub(100L, "octocat", "홍길동");
+	}
+
+	@Test
+	void 데드락이_재시도에서도_나면_failed로_돌려보내고_코드를_발급하지_않는다() throws IOException {
+		when(memberService.loginWithGithub(anyLong(), anyString(), anyString()))
+				.thenThrow(new CannotAcquireLockException("Deadlock found when trying to get lock"));
+
+		String location = run(attributes());
+
+		assertThat(location).isEqualTo("https://jandi.example.com/auth/callback?error=failed");
+		verify(memberService, times(2)).loginWithGithub(anyLong(), anyString(), anyString());
+		verify(authCodeService, never()).issue(anyLong());
 	}
 
 	@Test
