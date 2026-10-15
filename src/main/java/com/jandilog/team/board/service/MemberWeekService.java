@@ -2,6 +2,7 @@ package com.jandilog.team.board.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -54,8 +55,21 @@ public class MemberWeekService {
 		WeekData data = readWeekData(subjects.stream().map(Subject::memberId).distinct().toList(), weekStart);
 
 		Map<Long, MemberWeek> result = new HashMap<>();
+		List<Subject> live = new ArrayList<>();
 		for (Subject subject : subjects) {
-			result.put(subject.memberId(), weekOf(subject, weekStart, data));
+			MemberWeek stored = storedWeek(subject.memberId(), data);
+			if (stored != null) {
+				result.put(subject.memberId(), stored);
+			}
+			else {
+				live.add(subject);
+			}
+		}
+		// 계산할 회원의 잔디 캐시는 회원마다 따로 읽지 않고 한 번에 읽는다
+		Map<Long, GrassSnapshot> grass = grassCacheService
+				.findLatestAll(live.stream().map(Subject::memberId).distinct().toList());
+		for (Subject subject : live) {
+			result.put(subject.memberId(), liveWeek(subject, weekStart, data, grass.get(subject.memberId())));
 		}
 		return result;
 	}
@@ -73,21 +87,19 @@ public class MemberWeekService {
 		return new WeekData(judgments, storedDays, records, exempted, exemptionPeriod);
 	}
 
-	// 확정된 통과·미달 주는 확정 결과를, 아니면 잔디 캐시와 기록글로 계산하고 제외·면제 주면 상태를 덮는다
-	private MemberWeek weekOf(Subject subject, LocalDate weekStart, WeekData data) {
-		long memberId = subject.memberId();
+	// 확정된 통과·미달 주는 확정 결과. 아니면 null
+	private static MemberWeek storedWeek(long memberId, WeekData data) {
 		WeeklyJudgment judgment = data.judgments().get(memberId);
-		if (judgment != null) {
-			MemberWeek stored = MemberWeekCalculator.confirmed(judgment,
-					data.storedDays().getOrDefault(judgment.getId(), List.of()));
-			if (stored != null) {
-				return stored;
-			}
-		}
-		GrassSnapshot snapshot = grassCacheService.findLatest(memberId).orElse(null);
+		return judgment == null ? null
+				: MemberWeekCalculator.confirmed(judgment, data.storedDays().getOrDefault(judgment.getId(), List.of()));
+	}
+
+	// 확정 결과가 없는 주는 잔디 캐시와 기록글로 계산하고, 제외·면제 주면 상태를 덮는다. snapshot은 캐시가 없으면 null
+	private MemberWeek liveWeek(Subject subject, LocalDate weekStart, WeekData data, GrassSnapshot snapshot) {
+		long memberId = subject.memberId();
 		MemberWeek live = MemberWeekCalculator.live(weekStart, snapshot,
 				data.records().getOrDefault(memberId, Map.of()));
-		TeamBoardStatus fixed = fixedStatus(subject, judgment, weekStart, data.exemptionPeriod(),
+		TeamBoardStatus fixed = fixedStatus(subject, data.judgments().get(memberId), weekStart, data.exemptionPeriod(),
 				data.exempted().contains(memberId));
 		return fixed == null ? live : live.withStatus(fixed);
 	}

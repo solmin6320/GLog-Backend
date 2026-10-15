@@ -8,7 +8,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -27,7 +30,7 @@ import com.jandilog.judgment.dto.GrassSnapshot;
 // 잔디 조회의 단일 창구. 홈·프로필·주간 활동·팀 현황판·판정이 모두 이 캐시를 본다.
 // Redis grass:{memberId}:{yyyy-MM-dd}(조회한 날 KST), JSON, TTL 26시간 (DB명세서 2장).
 // GitHub는 회원당 하루 1회만 부른다(기능명세서 5장). 새벽 6시 일괄 갱신이 채우고, 판정이 못 찾으면 그때 한 번 더 부른다.
-// 화면은 findLatest만 쓴다(GitHub를 부르지 않는다). getOrFetch·refresh는 일괄 갱신·판정·관리자 재시도용이다
+// 화면은 findLatest·findLatestAll만 쓴다(GitHub를 부르지 않는다). getOrFetch·refresh는 일괄 갱신·판정·관리자 재시도용이다
 @Service
 public class GrassCacheService {
 
@@ -71,6 +74,16 @@ public class GrassCacheService {
 		return find(memberId, today).or(() -> find(memberId, today.minusDays(1)));
 	}
 
+	// 화면용 여러 회원. 회원마다 findLatest를 부른 것과 같고, Redis는 회원 수와 관계없이 MGET 두 번까지만 부른다.
+	// 캐시가 없는 회원은 결과에 없다
+	public Map<Long, GrassSnapshot> findLatestAll(Collection<Long> memberIds) {
+		LocalDate today = today();
+		List<Long> ids = memberIds.stream().distinct().toList();
+		Map<Long, GrassSnapshot> found = findAll(ids, today);
+		found.putAll(findAll(ids.stream().filter(id -> !found.containsKey(id)).toList(), today.minusDays(1)));
+		return found;
+	}
+
 	public Optional<GrassSnapshot> find(long memberId, LocalDate date) {
 		String json;
 		try {
@@ -81,6 +94,34 @@ public class GrassCacheService {
 			log.warn("잔디 캐시를 읽지 못했어요 memberId={} type={}", memberId, e.getClass().getSimpleName());
 			return Optional.empty();
 		}
+		return parse(memberId, date, json);
+	}
+
+	private Map<Long, GrassSnapshot> findAll(List<Long> memberIds, LocalDate date) {
+		Map<Long, GrassSnapshot> result = new HashMap<>();
+		if (memberIds.isEmpty()) {
+			return result;
+		}
+		List<String> values;
+		try {
+			values = redis.opsForValue().multiGet(memberIds.stream().map(id -> key(id, date)).toList());
+		}
+		catch (DataAccessException e) {
+			// find와 같이 Redis 장애는 캐시가 없는 것으로 본다
+			log.warn("잔디 캐시를 읽지 못했어요 members={} type={}", memberIds.size(), e.getClass().getSimpleName());
+			return result;
+		}
+		if (values == null) {
+			return result;
+		}
+		for (int i = 0; i < memberIds.size(); i++) {
+			long memberId = memberIds.get(i);
+			parse(memberId, date, values.get(i)).ifPresent(snapshot -> result.put(memberId, snapshot));
+		}
+		return result;
+	}
+
+	private Optional<GrassSnapshot> parse(long memberId, LocalDate date, String json) {
 		if (json == null) {
 			return Optional.empty();
 		}
