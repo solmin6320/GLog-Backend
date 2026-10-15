@@ -1,6 +1,7 @@
 package com.jandilog.team.service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,18 +42,14 @@ public class TeamWarningService {
 		recalculationService.recalculate(memberId);
 	}
 
-	// 팀 삭제: 이 팀 카테고리가 붙은 모든 경고에서 뺀다(자진 탈퇴해 경고만 남은 사람 포함). 영향받은 회원 각각 재계산.
-	// 회원 행 잠금은 id 오름차순으로 잡아 같은 시각의 다른 팀 삭제와 교착하지 않게 한다
+	// 팀 삭제: 이 팀 카테고리가 붙은 모든 경고에서 뺀다(자진 탈퇴해 경고만 남은 사람 포함). 영향받은 회원을 한 번에 재계산.
+	// 회원 행 잠금은 id 오름차순(lockMembers)으로 잡아 같은 시각의 다른 팀 삭제와 교착하지 않게 한다
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void removeCategoriesOnTeamDelete(long teamId, LocalDateTime now) {
-		List<Long> memberIds = teamWarningRepository.findMemberIdsWithLiveCategory(teamId).stream().sorted().toList();
-		for (Long memberId : memberIds) {
-			recalculationService.lockMember(memberId);
-		}
+		List<Long> memberIds = teamWarningRepository.findMemberIdsWithLiveCategory(teamId);
+		recalculationService.lockMembers(memberIds);
 		removeCategories(teamWarningRepository.findLiveCategoriesOfTeam(teamId), WarningDeleteReason.TEAM_DELETED, now);
-		for (Long memberId : memberIds) {
-			recalculationService.recalculate(memberId);
-		}
+		recalculationService.recalculateAll(memberIds);
 	}
 
 	// 추방자가 아이디 초대로 돌아오면 이 팀 카테고리를 되살리고 경고의 삭제 표시를 푼다 (E-14, Q-02)
@@ -76,7 +73,7 @@ public class TeamWarningService {
 		recalculationService.recalculate(memberId);
 	}
 
-	// 카테고리를 빼고, 경고마다 남은 카테고리를 세어 0이면 살아 있는 경고만 소프트 삭제한다
+	// 카테고리를 빼고, 남은 카테고리가 없는 살아 있는 경고만 소프트 삭제한다. 남은 카테고리는 경고 전체를 한 번에 확인한다
 	private void removeCategories(List<WarningTeam> categories, WarningDeleteReason reason, LocalDateTime now) {
 		if (categories.isEmpty()) {
 			return;
@@ -87,8 +84,10 @@ public class TeamWarningService {
 			warningIds.add(category.getWarningId());
 		}
 		warningRepository.flush();
-		for (Warning warning : warningRepository.findAllById(warningIds)) {
-			if (warning.isAlive() && teamWarningRepository.countLiveCategories(warning.getId()) == 0) {
+		List<Warning> warnings = warningRepository.findAllById(warningIds);
+		Set<Long> stillCategorized = new HashSet<>(teamWarningRepository.findWarningIdsWithLiveCategory(warningIds));
+		for (Warning warning : warnings) {
+			if (warning.isAlive() && !stillCategorized.contains(warning.getId())) {
 				warning.softDelete(reason, now);
 			}
 		}

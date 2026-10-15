@@ -20,6 +20,7 @@ import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.member.domain.Member;
 import com.jandilog.member.repository.MemberRepository;
+import com.jandilog.post.dto.CursorPage;
 import com.jandilog.team.domain.Team;
 import com.jandilog.team.domain.TeamJoinedBy;
 import com.jandilog.team.domain.TeamMember;
@@ -33,7 +34,7 @@ import com.jandilog.team.repository.TeamMemberCount;
 import com.jandilog.team.repository.TeamMemberRepository;
 import com.jandilog.team.repository.TeamRepository;
 
-// 팀 생성·조회·정보 수정과 초대코드 재확인 (기능명세서 2장, 화면설계서 TM-01·TM-02·TM-06).
+// 팀 생성·조회·공개 설정 변경과 초대코드 재확인 (기능명세서 2장, 화면설계서 TM-01·TM-02·TM-06).
 // 팀을 바꾸는 흐름은 READ_COMMITTED + 팀 행 잠금으로 직렬화해서, 앞선 변경이 커밋된 뒤의 값을 보고 판단한다
 @Service
 public class TeamService {
@@ -115,28 +116,30 @@ public class TeamService {
 		return response(team, viewerId, membership.getJoinedAt());
 	}
 
-	// 팀원 목록: 팀장이 맨 앞, 나머지는 참가한 순서. 그 팀의 팀원·팀장만
+	// 팀원 목록: 팀장이 맨 앞, 나머지는 참가한 순서. 그 팀의 팀원·팀장만. 커서 기반 20개 (Q-06)
 	@Transactional(readOnly = true)
-	public List<TeamMemberResponse> members(long viewerId, long teamId) {
+	public CursorPage<TeamMemberResponse> members(long viewerId, long teamId, String cursor) {
 		Team team = access.requireAlive(teamId);
 		access.requireMembership(teamId, viewerId);
-		List<TeamMember> rows = teamMemberRepository.findByTeamIdAndLeftAtIsNullOrderByJoinedAtAscIdAsc(teamId);
-		Map<Long, Member> members = membersById(rows.stream().map(TeamMember::getMemberId).toList());
+		TeamCursor after = TeamCursor.parse(cursor);
 
-		List<TeamMemberResponse> result = new ArrayList<>();
-		for (TeamMember row : rows) {
+		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다. 팀장은 첫 페이지에만 나온다
+		List<TeamMember> rows = after == null
+				? teamMemberRepository.findActivePage(teamId, team.getLeaderId(), TeamCursor.fetchSize())
+				: teamMemberRepository.findActivePageAfter(teamId, team.getLeaderId(), after.time(), after.id(),
+						TeamCursor.fetchSize());
+		String nextCursor = TeamCursor.nextOf(rows, row -> new TeamCursor(row.getJoinedAt(), row.getId()));
+		List<TeamMember> page = TeamCursor.trim(rows);
+		Map<Long, Member> members = membersById(page.stream().map(TeamMember::getMemberId).toList());
+
+		List<TeamMemberResponse> items = new ArrayList<>();
+		for (TeamMember row : page) {
 			Member member = members.get(row.getMemberId());
 			if (member != null) {
-				TeamMemberResponse item = TeamMemberResponse.of(member, team.isLeader(row.getMemberId()),
-						row.getJoinedAt());
-				if (item.isLeader()) {
-					result.add(0, item);
-				} else {
-					result.add(item);
-				}
+				items.add(TeamMemberResponse.of(member, team.isLeader(row.getMemberId()), row.getJoinedAt()));
 			}
 		}
-		return result;
+		return new CursorPage<>(items, nextCursor);
 	}
 
 	// 초대코드 재확인: 그 팀의 팀장만. 재발급은 없고 처음 정해진 코드를 그대로 보여준다 (Q-01)
@@ -147,19 +150,13 @@ public class TeamService {
 		return team.getInviteCode();
 	}
 
-	// 팀 이름·소개·공개 설정 수정(팀장만). 보낸 항목만 바꾼다
+	// 공개 설정 변경(팀장만). 팀 이름·소개 수정은 명세에 없다 (기능명세서 2장)
 	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public TeamResponse update(long viewerId, long teamId, UpdateTeamInput input) {
 		Team team = access.requireAliveForUpdate(teamId);
 		access.requireLeader(team, viewerId);
 
-		String name = input.name() == null ? team.getName() : normalizeName(input.name());
-		String description = input.description() == null ? team.getDescription()
-				: normalizeDescription(input.description());
-		team.changeInfo(name, description);
-		if (input.isPublic() != null) {
-			team.changeVisibility(input.isPublic());
-		}
+		team.changeVisibility(input.isPublic());
 		teamRepository.saveAndFlush(team);
 
 		TeamMember membership = access.requireMembership(teamId, viewerId);
