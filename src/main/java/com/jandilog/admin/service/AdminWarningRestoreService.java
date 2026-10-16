@@ -3,6 +3,9 @@ package com.jandilog.admin.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -90,13 +93,15 @@ public class AdminWarningRestoreService {
 		Map<Long, Member> members = memberRepository
 				.findAllById(page.rows().stream().map(Warning::getMemberId).toList()).stream()
 				.collect(Collectors.toMap(Member::getId, Function.identity()));
+		Map<Long, List<AdminWarningTeam>> teamsByWarning = restoreTeams(
+				page.rows().stream().map(Warning::getId).toList());
 		List<AdminDeletedWarning> items = new ArrayList<>();
 		for (Warning warning : page.rows()) {
 			Member member = members.get(warning.getMemberId());
 			if (member == null) {
 				continue;
 			}
-			List<AdminWarningTeam> teams = restoreTeams(warning.getId());
+			List<AdminWarningTeam> teams = teamsByWarning.getOrDefault(warning.getId(), List.of());
 			items.add(new AdminDeletedWarning(warning.getId(), MemberBrief.from(member),
 					warning.getWeekStart().toString(), warning.getDeleteReason(),
 					KstFormats.of(warning.getDeletedAt()), teams, teams.isEmpty()));
@@ -157,15 +162,27 @@ public class AdminWarningRestoreService {
 
 	// 복구하면 되살아나는 카테고리: 아직 있는 팀 것만
 	private List<AdminWarningTeam> restoreTeams(long warningId) {
-		List<WarningTeam> categories = warningTeamRepository.findByWarningId(warningId);
+		return restoreTeams(List.of(warningId)).getOrDefault(warningId, List.of());
+	}
+
+	// 경고 여럿의 되살아나는 카테고리를 카테고리 · 팀 이름 한 번씩만 읽어 경고별로 나눈다. 되살릴 팀이 없는 경고는 결과에 없다
+	private Map<Long, List<AdminWarningTeam>> restoreTeams(Collection<Long> warningIds) {
+		if (warningIds.isEmpty()) {
+			return Map.of();
+		}
+		List<WarningTeam> categories = warningTeamRepository.findByWarningIdIn(warningIds);
 		Map<Long, TeamReadModel.TeamName> names = teamReadModel
-				.findByIds(categories.stream().map(WarningTeam::getTeamId).toList());
-		return categories.stream()
-				.map(WarningTeam::getTeamId)
-				.filter(teamId -> names.containsKey(teamId) && !names.get(teamId).deleted())
-				.map(teamId -> new AdminWarningTeam(teamId, names.get(teamId).name()))
-				.sorted((a, b) -> a.name().compareTo(b.name()))
-				.toList();
+				.findByIds(categories.stream().map(WarningTeam::getTeamId).collect(Collectors.toSet()));
+		Map<Long, List<AdminWarningTeam>> result = new HashMap<>();
+		for (WarningTeam category : categories) {
+			TeamReadModel.TeamName team = names.get(category.getTeamId());
+			if (team != null && !team.deleted()) {
+				result.computeIfAbsent(category.getWarningId(), id -> new ArrayList<>())
+						.add(new AdminWarningTeam(category.getTeamId(), team.name()));
+			}
+		}
+		result.values().forEach(teams -> teams.sort(Comparator.comparing(AdminWarningTeam::name)));
+		return result;
 	}
 
 	private Set<Long> aliveTeamIds(List<WarningTeam> categories) {

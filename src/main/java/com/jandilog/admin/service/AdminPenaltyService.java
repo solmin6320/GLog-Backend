@@ -3,6 +3,8 @@ package com.jandilog.admin.service;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -74,12 +76,13 @@ public class AdminPenaltyService {
 
 		Map<Long, Member> members = memberRepository.findAllById(page.rows().stream().map(Target::memberId).toList())
 				.stream().collect(Collectors.toMap(Member::getId, Function.identity()));
+		Map<Long, List<AdminWarningTeam>> teams = teamsOf(members.keySet());
 		List<AdminPenaltyTarget> items = new ArrayList<>();
 		for (Target target : page.rows()) {
 			Member member = members.get(target.memberId());
 			if (member != null) {
 				items.add(new AdminPenaltyTarget(MemberBrief.from(member), target.warningCount(),
-						target.reachedWeek().toString(), teamsOf(target.memberId())));
+						target.reachedWeek().toString(), teams.getOrDefault(target.memberId(), List.of())));
 			}
 		}
 		return new AdminPenaltyTargetPage(items, page.nextCursor(), all.size());
@@ -94,31 +97,50 @@ public class AdminPenaltyService {
 				fulfillment.getReachedWeek().toString());
 	}
 
-	// 지금 세는 경고(살아 있고 차감되지 않은 것)에 붙은 팀. 삭제된 팀 카테고리는 이미 빠져 있다
-	private List<AdminWarningTeam> teamsOf(long memberId) {
-		if (!(recalculationService.calculate(memberId) instanceof WarningRecalcResult.Calculated state)) {
-			return List.of();
+	// 회원별로 지금 세는 경고(살아 있고 차감되지 않은 것)에 붙은 팀. 삭제된 팀 카테고리는 이미 빠져 있다.
+	// 한 페이지 회원을 재계산·경고·카테고리·팀 이름 순으로 한 번씩만 읽는다. 팀이 없거나 보류 중인 회원은 결과에 없다
+	private Map<Long, List<AdminWarningTeam>> teamsOf(Collection<Long> memberIds) {
+		Map<Long, Long> memberByWarning = new HashMap<>();
+		for (Warning warning : activeWarnings(memberIds)) {
+			memberByWarning.put(warning.getId(), warning.getMemberId());
 		}
-		Set<LocalDate> activeWeeks = Set.copyOf(state.activeWarningWeeks());
-		List<Long> warningIds = warningRepository.findByMemberIdAndDeletedAtIsNullOrderByWeekStartAsc(memberId)
-				.stream()
-				.filter(warning -> activeWeeks.contains(warning.getWeekStart()))
-				.map(Warning::getId)
-				.toList();
-		if (warningIds.isEmpty()) {
-			return List.of();
+		if (memberByWarning.isEmpty()) {
+			return Map.of();
 		}
-		Set<Long> teamIds = new LinkedHashSet<>();
-		for (WarningTeam category : warningTeamRepository.findByWarningIdIn(warningIds)) {
+		Map<Long, Set<Long>> teamIdsByMember = new HashMap<>();
+		for (WarningTeam category : warningTeamRepository.findByWarningIdIn(memberByWarning.keySet())) {
 			if (!category.isRemoved()) {
-				teamIds.add(category.getTeamId());
+				teamIdsByMember.computeIfAbsent(memberByWarning.get(category.getWarningId()), id -> new LinkedHashSet<>())
+						.add(category.getTeamId());
 			}
 		}
-		Map<Long, TeamReadModel.TeamName> names = teamReadModel.findByIds(teamIds);
-		return teamIds.stream()
+		Map<Long, TeamReadModel.TeamName> names = teamReadModel
+				.findByIds(teamIdsByMember.values().stream().flatMap(Set::stream).collect(Collectors.toSet()));
+		Map<Long, List<AdminWarningTeam>> result = new HashMap<>();
+		teamIdsByMember.forEach((memberId, teamIds) -> result.put(memberId, teamIds.stream()
 				.filter(names::containsKey)
 				.map(teamId -> new AdminWarningTeam(teamId, names.get(teamId).name()))
 				.sorted((a, b) -> a.name().compareTo(b.name()))
+				.toList()));
+		return result;
+	}
+
+	// 살아 있는 경고 중 재계산에서 아직 세는 주의 것. 보류 중인 회원은 셀 수 없어 뺀다
+	private List<Warning> activeWarnings(Collection<Long> memberIds) {
+		if (memberIds.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, Set<LocalDate>> activeWeeks = new HashMap<>();
+		recalculationService.calculateAll(memberIds).forEach((memberId, result) -> {
+			if (result instanceof WarningRecalcResult.Calculated state) {
+				activeWeeks.put(memberId, Set.copyOf(state.activeWarningWeeks()));
+			}
+		});
+		if (activeWeeks.isEmpty()) {
+			return List.of();
+		}
+		return warningRepository.findByMemberIdInAndDeletedAtIsNull(activeWeeks.keySet()).stream()
+				.filter(warning -> activeWeeks.get(warning.getMemberId()).contains(warning.getWeekStart()))
 				.toList();
 	}
 

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Controller;
 
 import com.jandilog.admin.dto.AdminPostFilter;
 import com.jandilog.admin.dto.AdminPostPage;
+import com.jandilog.admin.service.AdminPostQueryService;
 import com.jandilog.admin.service.AdminPostService;
 import com.jandilog.common.security.AuthenticatedMember;
 
@@ -16,9 +17,11 @@ import com.jandilog.common.security.AuthenticatedMember;
 @Controller
 public class AdminPostController {
 
+	private final AdminPostQueryService queryService;
 	private final AdminPostService postService;
 
-	public AdminPostController(AdminPostService postService) {
+	public AdminPostController(AdminPostQueryService queryService, AdminPostService postService) {
+		this.queryService = queryService;
 		this.postService = postService;
 	}
 
@@ -26,7 +29,7 @@ public class AdminPostController {
 	@PreAuthorize("hasRole('ADMIN')")
 	public AdminPostPage adminPosts(@Argument AdminPostFilter filter, @Argument String keyword,
 			@Argument String after) {
-		return postService.list(filter, keyword, after);
+		return queryService.list(filter, keyword, after);
 	}
 
 	@MutationMapping
