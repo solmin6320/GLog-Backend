@@ -2,13 +2,17 @@ package com.jandilog.admin.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,9 +59,13 @@ class AdminPenaltyServiceTest {
 			when(member.getNickname()).thenReturn("회원" + id);
 			when(member.getGithubLogin()).thenReturn("user" + id);
 			members.add(member);
-			// 팀을 읽을 필요가 없도록 경고 이력이 비어 있는 보류 상태로 둔다
-			when(recalculation.calculate(id)).thenReturn(new WarningRecalcResult.OnHold(List.of(W2)));
 		}
+		// 팀을 읽을 필요가 없도록 모두 보류 상태로 둔다
+		when(recalculation.calculateAll(anyCollection())).thenAnswer(call -> {
+			Map<Long, WarningRecalcResult> states = new HashMap<>();
+			call.<Collection<Long>>getArgument(0).forEach(id -> states.put(id, new WarningRecalcResult.OnHold(List.of(W2))));
+			return states;
+		});
 		when(memberRepository.findAllById(anyIterable())).thenAnswer(call -> {
 			List<Long> wanted = new ArrayList<>();
 			call.<Iterable<Long>>getArgument(0).forEach(wanted::add);

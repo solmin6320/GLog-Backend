@@ -82,10 +82,7 @@ public class TeamBoardService {
 
 		List<TeamBoardMemberResponse> members = new ArrayList<>();
 		for (BoardMemberRow row : rows) {
-			MemberWeek week = weeks.get(row.memberId());
-			members.add(new TeamBoardMemberResponse(row.memberId(), row.nickname(), row.githubLogin(),
-					row.memberId() == viewerId, week.days().stream().map(TeamBoardDayResponse::from).toList(),
-					week.verifiedDays(), week.recordCount(), warnings.get(row.memberId()), week.status()));
+			members.add(memberResponse(row, viewerId, weeks.get(row.memberId()), warnings.get(row.memberId())));
 		}
 		return new TeamBoardResponse(weekStart.toString(), weekStart.plusDays(6).toString(),
 				grassFetchedAt(weeks.values()), weeks.values().stream().anyMatch(w -> w.verifiedDays() == null),
@@ -99,25 +96,44 @@ public class TeamBoardService {
 		List<BoardMemberRow> rows = repository.findCurrentMembers(teamIds.stream().distinct().toList());
 		Map<Long, MemberWeek> weeks = memberWeekService.load(subjects(rows), weekStart);
 
-		Map<Long, int[]> tally = new HashMap<>();
+		Map<Long, StatusCount> tally = new HashMap<>();
 		for (BoardMemberRow row : rows) {
-			int[] counts = tally.computeIfAbsent(row.teamId(), id -> new int[3]);
-			TeamBoardStatus status = weeks.get(row.memberId()).status();
+			tally.computeIfAbsent(row.teamId(), id -> new StatusCount()).add(weeks.get(row.memberId()).status());
+		}
+		Map<Long, TeamWeekSummaryResponse> result = new HashMap<>();
+		for (Long teamId : teamIds) {
+			StatusCount count = tally.getOrDefault(teamId, new StatusCount());
+			result.put(teamId,
+					new TeamWeekSummaryResponse(weekStart.toString(), count.pass, count.fail, count.notYet));
+		}
+		return result;
+	}
+
+	private static TeamBoardMemberResponse memberResponse(BoardMemberRow row, long viewerId, MemberWeek week,
+			Integer warningCount) {
+		return new TeamBoardMemberResponse(row.memberId(), row.nickname(), row.githubLogin(),
+				row.memberId() == viewerId, week.days().stream().map(TeamBoardDayResponse::from).toList(),
+				week.verifiedDays(), week.recordCount(), warningCount, week.status());
+	}
+
+	// 팀 하나의 이번 주 통과·미달·아직 인원
+	private static final class StatusCount {
+
+		private int pass;
+		private int fail;
+		private int notYet;
+
+		void add(TeamBoardStatus status) {
 			switch (status) {
-				case PASS -> counts[0]++;
-				case FAIL -> counts[1]++;
-				case NOT_YET -> counts[2]++;
+				case PASS -> pass++;
+				case FAIL -> fail++;
+				case NOT_YET -> notYet++;
 				case EXCLUDED -> {
 					// 판정 제외·면제는 어느 쪽에도 세지 않는다
 				}
 			}
 		}
-		Map<Long, TeamWeekSummaryResponse> result = new HashMap<>();
-		for (Long teamId : teamIds) {
-			int[] counts = tally.getOrDefault(teamId, new int[3]);
-			result.put(teamId, new TeamWeekSummaryResponse(weekStart.toString(), counts[0], counts[1], counts[2]));
-		}
-		return result;
+
 	}
 
 	private LocalDate currentWeekStart() {
@@ -150,9 +166,10 @@ public class TeamBoardService {
 	private Map<Long, Integer> teamWarningCounts(long teamId, List<BoardMemberRow> rows) {
 		List<Long> memberIds = rows.stream().map(BoardMemberRow::memberId).toList();
 		Set<WarningWeek> teamWarnings = new HashSet<>(repository.findTeamWarnings(teamId, memberIds));
+		Map<Long, WarningRecalcResult> states = warningService.calculateAll(memberIds);
 		Map<Long, Integer> counts = new HashMap<>();
 		for (Long memberId : memberIds) {
-			if (warningService.calculate(memberId) instanceof WarningRecalcResult.Calculated state) {
+			if (states.get(memberId) instanceof WarningRecalcResult.Calculated state) {
 				counts.put(memberId, (int) state.activeWarningWeeks().stream()
 						.filter(week -> teamWarnings.contains(new WarningWeek(memberId, week))).count());
 			}
