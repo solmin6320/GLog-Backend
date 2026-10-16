@@ -84,7 +84,19 @@ public class WeeklyJudgmentBatchService {
 
 	// 승인 회원 전원의 weekStart 주를 판정한다. 확정된 회원은 건너뛰고 보류 회원은 다시 돈다 (E-35)
 	public JudgmentSummary judgeWeek(LocalDate weekStart) {
-		List<MemberRef> members = sourceRepository.findActiveMembers();
+		return judgeMembers(sourceRepository.findActiveMembers(), weekStart);
+	}
+
+	// 승인 회원 중 weekStart 주의 판정 행이 없는 회원만 판정한다. 행이 있는 확정·보류 회원은 건드리지 않는다 (E-34, E-35)
+	public JudgmentSummary judgeMissingMembers(LocalDate weekStart) {
+		List<MemberRef> missing = sourceRepository.findActiveMembers().stream()
+				.filter(member -> judgmentRepository.findByMemberIdAndWeekStart(member.id(), weekStart).isEmpty())
+				.toList();
+		return judgeMembers(missing, weekStart);
+	}
+
+	// 주어진 회원들의 weekStart 주를 회원마다 따로 판정하고 결과를 센다
+	private JudgmentSummary judgeMembers(List<MemberRef> members, LocalDate weekStart) {
 		Counter counter = new Counter(members.size());
 		for (MemberRef member : members) {
 			try {

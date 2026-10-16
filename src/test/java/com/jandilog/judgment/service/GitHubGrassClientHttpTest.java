@@ -9,15 +9,11 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,8 +41,6 @@ class GitHubGrassClientHttpTest {
 	private static final LocalDate FROM = LocalDate.of(2026, 9, 28);
 	private static final LocalDate TO = FROM.plusDays(6);
 	private static final ObjectMapper JSON = new ObjectMapper();
-	private static final Pattern WINDOW = Pattern
-			.compile("d(\\d+): contributionsCollection\\(from: \"([^\"]+)\", to: \"([^\"]+)\"\\)");
 
 	private record Recorded(String method, String path, String rawQuery, String authorization, String userAgent,
 			String contentType, String body) {
@@ -56,7 +50,7 @@ class GitHubGrassClientHttpTest {
 	private ExecutorService executor;
 	private final List<Recorded> requests = new CopyOnWriteArrayList<>();
 	private volatile int status = 200;
-	private volatile String responseBody = GitHubGrassClientQueryParseTest.responseOf(0, 0, 0, 0, 0, 0, 0);
+	private volatile String responseBody = GitHubGrassClientQueryParseTest.responseOf(FROM, 0, 0, 0, 0, 0, 0, 0);
 	private volatile long delayMillis;
 	private volatile String redirectTo;
 	private Logger clientLogger;
@@ -144,7 +138,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 정상_응답을_일자별_기여로_돌려준다() {
-		responseBody = GitHubGrassClientQueryParseTest.responseOf(0, 3, 0, 1, 0, 0, 12);
+		responseBody = GitHubGrassClientQueryParseTest.responseOf(FROM, 0, 3, 0, 1, 0, 0, 12);
 
 		List<GrassDay> days = client().fetchDailyContributions("octocat", FROM, TO);
 
@@ -183,20 +177,12 @@ class GitHubGrassClientHttpTest {
 	}
 
 	@Test
-	void 요청_구간은_KST_하루씩_UTC로_바꿔서_보낸다() throws IOException {
+	void 요청_구간은_시작일_0시부터_종료일_23시_59분_59초까지_UTC_일자_경계로_한_번에_보낸다() throws IOException {
 		client().fetchDailyContributions("octocat", FROM, TO);
 
 		String query = JSON.readTree(requests.get(0).body()).path("query").asText();
-		List<Instant[]> windows = new ArrayList<>();
-		Matcher matcher = WINDOW.matcher(query);
-		while (matcher.find()) {
-			windows.add(new Instant[] {Instant.parse(matcher.group(2)), Instant.parse(matcher.group(3))});
-		}
-		assertThat(windows).hasSize(7);
-		assertThat(windows.get(0)[0]).isEqualTo(Instant.parse("2026-09-27T15:00:00Z"));
-		assertThat(windows.get(0)[1]).isEqualTo(Instant.parse("2026-09-28T14:59:59Z"));
-		assertThat(windows.get(6)[0]).isEqualTo(Instant.parse("2026-10-03T15:00:00Z"));
-		assertThat(windows.get(6)[1]).isEqualTo(Instant.parse("2026-10-04T14:59:59Z"));
+		assertThat(query).contains("from: \"2026-09-28T00:00:00Z\", to: \"2026-10-04T23:59:59Z\"");
+		assertThat(query.split("contributionsCollection", -1)).hasSize(2);
 	}
 
 	@Test
@@ -209,13 +195,13 @@ class GitHubGrassClientHttpTest {
 	// ---------- 구간 상한 ----------
 
 	@Test
-	void 구간이_62일이면_허용하고_별칭_62개로_한_번에_조회한다() {
+	void 구간이_62일이면_허용하고_한_번에_조회한다() {
 		LocalDate to = FROM.plusDays(61);
 		int[] totals = new int[62];
 		for (int i = 0; i < totals.length; i++) {
 			totals[i] = i % 3;
 		}
-		responseBody = GitHubGrassClientQueryParseTest.responseOf(totals);
+		responseBody = GitHubGrassClientQueryParseTest.responseOf(FROM, totals);
 
 		List<GrassDay> days = client().fetchDailyContributions("octocat", FROM, to);
 

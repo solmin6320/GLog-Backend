@@ -8,7 +8,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -27,7 +30,7 @@ import com.jandilog.judgment.dto.GrassSnapshot;
 // 잔디 조회의 단일 창구. 홈·프로필·주간 활동·팀 현황판·판정이 모두 이 캐시를 본다.
 // Redis grass:{memberId}:{yyyy-MM-dd}(조회한 날 KST), JSON, TTL 26시간 (DB명세서 2장).
 // GitHub는 회원당 하루 1회만 부른다(기능명세서 5장). 새벽 6시 일괄 갱신이 채우고, 판정이 못 찾으면 그때 한 번 더 부른다.
-// 화면은 findLatest만 쓴다(GitHub를 부르지 않는다). getOrFetch·refresh는 일괄 갱신·판정·관리자 재시도용이다
+// 화면은 findLatest·findLatestAll만 쓴다(GitHub를 부르지 않는다). getOrFetch·refresh는 일괄 갱신·판정·관리자 재시도용이다
 @Service
 public class GrassCacheService {
 
@@ -42,7 +45,7 @@ public class GrassCacheService {
 	private final StringRedisTemplate redis;
 	private final GrassClient grassClient;
 	private final Clock clock;
-	private final ObjectMapper objectMapper;
+	private final GrassSnapshotJson codec;
 	private final ReentrantLock[] locks = new ReentrantLock[LOCK_STRIPES];
 
 	public GrassCacheService(StringRedisTemplate redis, GrassClient grassClient, Clock clock,
@@ -50,7 +53,7 @@ public class GrassCacheService {
 		this.redis = redis;
 		this.grassClient = grassClient;
 		this.clock = clock;
-		this.objectMapper = objectMapper;
+		this.codec = new GrassSnapshotJson(objectMapper);
 		for (int i = 0; i < LOCK_STRIPES; i++) {
 			locks[i] = new ReentrantLock();
 		}
@@ -71,6 +74,16 @@ public class GrassCacheService {
 		return find(memberId, today).or(() -> find(memberId, today.minusDays(1)));
 	}
 
+	// 화면용 여러 회원. 회원마다 findLatest를 부른 것과 같고, Redis는 회원 수와 관계없이 MGET 두 번까지만 부른다.
+	// 캐시가 없는 회원은 결과에 없다
+	public Map<Long, GrassSnapshot> findLatestAll(Collection<Long> memberIds) {
+		LocalDate today = today();
+		List<Long> ids = memberIds.stream().distinct().toList();
+		Map<Long, GrassSnapshot> found = findAll(ids, today);
+		found.putAll(findAll(ids.stream().filter(id -> !found.containsKey(id)).toList(), today.minusDays(1)));
+		return found;
+	}
+
 	public Optional<GrassSnapshot> find(long memberId, LocalDate date) {
 		String json;
 		try {
@@ -81,11 +94,39 @@ public class GrassCacheService {
 			log.warn("잔디 캐시를 읽지 못했어요 memberId={} type={}", memberId, e.getClass().getSimpleName());
 			return Optional.empty();
 		}
+		return parse(memberId, date, json);
+	}
+
+	private Map<Long, GrassSnapshot> findAll(List<Long> memberIds, LocalDate date) {
+		Map<Long, GrassSnapshot> result = new HashMap<>();
+		if (memberIds.isEmpty()) {
+			return result;
+		}
+		List<String> values;
+		try {
+			values = redis.opsForValue().multiGet(memberIds.stream().map(id -> key(id, date)).toList());
+		}
+		catch (DataAccessException e) {
+			// find와 같이 Redis 장애는 캐시가 없는 것으로 본다
+			log.warn("잔디 캐시를 읽지 못했어요 members={} type={}", memberIds.size(), e.getClass().getSimpleName());
+			return result;
+		}
+		if (values == null) {
+			return result;
+		}
+		for (int i = 0; i < memberIds.size(); i++) {
+			long memberId = memberIds.get(i);
+			parse(memberId, date, values.get(i)).ifPresent(snapshot -> result.put(memberId, snapshot));
+		}
+		return result;
+	}
+
+	private Optional<GrassSnapshot> parse(long memberId, LocalDate date, String json) {
 		if (json == null) {
 			return Optional.empty();
 		}
 		try {
-			return Optional.of(toSnapshot(objectMapper.readValue(json, CacheEntry.class)));
+			return Optional.of(codec.read(json));
 		}
 		catch (JsonProcessingException | DateTimeParseException | IllegalArgumentException e) {
 			// 깨진 캐시는 없는 것으로 보고 다음 조회가 덮어쓴다
@@ -154,8 +195,7 @@ public class GrassCacheService {
 	// 저장이 실패해도 방금 받은 값은 돌려준다(다음 호출이 다시 부른다)
 	private void store(GrassSnapshot snapshot, LocalDate today) {
 		try {
-			redis.opsForValue().set(key(snapshot.memberId(), today), objectMapper.writeValueAsString(toEntry(snapshot)),
-					TTL);
+			redis.opsForValue().set(key(snapshot.memberId(), today), codec.write(snapshot), TTL);
 		}
 		catch (JsonProcessingException | DataAccessException e) {
 			log.warn("잔디 캐시를 저장하지 못했어요 memberId={} type={}", snapshot.memberId(), e.getClass().getSimpleName());
@@ -168,36 +208,6 @@ public class GrassCacheService {
 
 	private LocalDate today() {
 		return LocalDate.now(clock.withZone(KST));
-	}
-
-	// Redis JSON 모양. 날짜는 문자열로 두어 ObjectMapper 설정과 무관하게 같은 JSON이 나온다
-	record CacheEntry(long memberId, String from, String to, String fetchedAt, List<CacheDay> days) {
-	}
-
-	record CacheDay(String date, int count) {
-	}
-
-	private static CacheEntry toEntry(GrassSnapshot snapshot) {
-		return new CacheEntry(snapshot.memberId(), snapshot.from().toString(), snapshot.to().toString(),
-				snapshot.fetchedAt().toString(),
-				snapshot.days().stream().map(d -> new CacheDay(d.date().toString(), d.count())).toList());
-	}
-
-	private static GrassSnapshot toSnapshot(CacheEntry entry) {
-		if (entry == null || entry.from() == null || entry.to() == null || entry.fetchedAt() == null
-				|| entry.days() == null) {
-			throw new IllegalArgumentException("잔디 캐시에 빈 값이 있어요");
-		}
-		return new GrassSnapshot(entry.memberId(), LocalDate.parse(entry.from()), LocalDate.parse(entry.to()),
-				LocalDateTime.parse(entry.fetchedAt()),
-				entry.days().stream().map(GrassCacheService::toDay).toList());
-	}
-
-	private static GrassDay toDay(CacheDay day) {
-		if (day == null || day.date() == null) {
-			throw new IllegalArgumentException("잔디 캐시 일자에 빈 값이 있어요");
-		}
-		return new GrassDay(LocalDate.parse(day.date()), day.count());
 	}
 
 }

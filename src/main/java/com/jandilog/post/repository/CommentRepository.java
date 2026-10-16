@@ -19,7 +19,7 @@ import org.springframework.stereotype.Repository;
 
 import com.jandilog.post.domain.Comment;
 
-// MongoDB comments 컬렉션 접근. 목록은 글 id 묶음으로 한 번에 읽어 N+1을 피한다
+// MongoDB comments 컬렉션 접근. 댓글 수는 글 id 묶음으로 한 번에 센다
 @Repository
 public class CommentRepository {
 
@@ -37,10 +37,15 @@ public class CommentRepository {
 		return Optional.ofNullable(mongo.findById(id, Comment.class));
 	}
 
-	// 글 상세의 댓글 목록: 오래된 순
-	public List<Comment> findAliveByPostIds(Collection<ObjectId> postIds) {
-		Query query = Query.query(Criteria.where("postId").in(postIds).and("deletedAt").isNull())
-				.with(Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("_id")));
+	// 글 상세의 댓글 한 페이지: 오래된 순(작성 시각, id). 위치(afterCreatedAt, afterId) 뒤부터 limit개
+	public List<Comment> findAlivePageByPostId(ObjectId postId, Instant afterCreatedAt, ObjectId afterId, int limit) {
+		Criteria criteria = Criteria.where("postId").is(postId).and("deletedAt").isNull();
+		if (afterCreatedAt != null && afterId != null) {
+			criteria = criteria.orOperator(Criteria.where("createdAt").gt(afterCreatedAt),
+					Criteria.where("createdAt").is(afterCreatedAt).and("_id").gt(afterId));
+		}
+		Query query = Query.query(criteria)
+				.with(Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("_id"))).limit(limit);
 		return mongo.find(query, Comment.class);
 	}
 
