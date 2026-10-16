@@ -19,4 +19,10 @@ public enum JudgmentStatus {
 	public boolean isSkipped() {
 		return this == EXEMPT || this == EXCLUDED;
 	}
+
+	// 인증일·기록글 수를 보여주는 결과. 제외·면제·보류 주는 "—"로 둔다 (화면설계서 AC-01 ⑤).
+	// 정정·소급 면제로 면제가 된 주는 DB에 예전 수치가 남아 있어도 보여주지 않는다
+	public boolean showsCounts() {
+		return this == PASS || this == FAIL;
+	}
 }

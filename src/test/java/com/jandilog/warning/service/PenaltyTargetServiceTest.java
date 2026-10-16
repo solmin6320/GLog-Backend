@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,11 +30,13 @@ class PenaltyTargetServiceTest {
 		WarningRecalculationService recalculation = mock(WarningRecalculationService.class);
 		when(warnings.findMemberIdsWithAliveWarningsAtLeast(3)).thenReturn(List.of(1L, 2L, 3L, 4L, 5L));
 		// 1: 늦게 도달, 2: 먼저 도달(경고 4개), 3: 보류 중, 4: 살아 있는 경고는 3개지만 차감돼 대상이 아님, 5: 1과 같은 주에 도달
-		when(recalculation.calculate(1L)).thenReturn(calculated(3, true, W2, W3, W4));
-		when(recalculation.calculate(2L)).thenReturn(calculated(4, true, W1, W2, W3, W4));
-		when(recalculation.calculate(3L)).thenReturn(new WarningRecalcResult.OnHold(List.of(W4)));
-		when(recalculation.calculate(4L)).thenReturn(calculated(2, false, W3, W4));
-		when(recalculation.calculate(5L)).thenReturn(calculated(3, true, W2, W3, W4));
+		// 후보 전체를 한 번에 재계산한다
+		when(recalculation.calculateAll(List.of(1L, 2L, 3L, 4L, 5L))).thenReturn(Map.of(
+				1L, calculated(3, true, W2, W3, W4),
+				2L, calculated(4, true, W1, W2, W3, W4),
+				3L, new WarningRecalcResult.OnHold(List.of(W4)),
+				4L, calculated(2, false, W3, W4),
+				5L, calculated(3, true, W2, W3, W4)));
 
 		List<Target> targets = new PenaltyTargetService(warnings, recalculation).findTargets();
 

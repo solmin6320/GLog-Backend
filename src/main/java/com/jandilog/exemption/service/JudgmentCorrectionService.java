@@ -87,7 +87,7 @@ public class JudgmentCorrectionService {
 		WeeklyJudgment judgment = judgmentRepository.findById(InputRules.id(judgmentId))
 				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 		requireCorrectable(judgment, target);
-		Member member = memberRepository.findById(judgment.getMemberId()).orElseThrow();
+		Member member = memberOf(judgment);
 		RecalcImpact impact = impactService.ofStatusChange(judgment.getMemberId(), judgment.getWeekStart(), target);
 		return new CorrectionPreview(judgment.getId(), MemberBrief.from(member), judgment.getWeekStart().toString(),
 				judgment.getStatus(), target, impact);
@@ -100,12 +100,7 @@ public class JudgmentCorrectionService {
 		JudgmentStatus target = input.status();
 		String reason = InputRules.reason(input.reason(), REASON_MAX_LENGTH, ErrorCode.REASON_REQUIRED);
 
-		// 회원 락을 먼저 잡고 판정을 읽는다. 다른 관리자가 먼저 바꾼 결과가 보인다
-		long memberId = lookupRepository.findMemberIdById(judgmentId)
-				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
-		recalculationService.lockMember(memberId);
-		WeeklyJudgment judgment = judgmentRepository.findById(judgmentId)
-				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+		WeeklyJudgment judgment = lockAndLoad(judgmentId);
 		if (input.expectedStatus() != null && input.expectedStatus() != judgment.getStatus()) {
 			throw new ApiException(ErrorCode.JUDGMENT_CHANGED);
 		}
@@ -113,17 +108,40 @@ public class JudgmentCorrectionService {
 
 		LocalDateTime now = LocalDateTime.now(clock);
 		JudgmentStatus before = judgment.getStatus();
+		applyCorrection(judgment, target, now);
+		recordHistory(adminId, judgmentId, before, target, reason, now);
+
+		Member member = memberOf(judgment);
+		return CorrectedJudgment.of(judgmentId, MemberBrief.from(member), judgment.getWeekStart().toString(), target,
+				recalculationService.recalculate(judgment.getMemberId()));
+	}
+
+	// 회원 락을 먼저 잡고 판정을 읽는다. 다른 관리자가 먼저 바꾼 결과가 보인다
+	private WeeklyJudgment lockAndLoad(long judgmentId) {
+		long memberId = lookupRepository.findMemberIdById(judgmentId)
+				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+		recalculationService.lockMember(memberId);
+		return judgmentRepository.findById(judgmentId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+	}
+
+	// 판정 행을 정정 결과로 바꾸고, 미달이면 그 주 경고를 맞춘다
+	private void applyCorrection(WeeklyJudgment judgment, JudgmentStatus target, LocalDateTime now) {
 		judgment.correctTo(target, target == JudgmentStatus.EXEMPT ? SkipReason.PERSONAL_EXEMPTION : null);
 		if (target == JudgmentStatus.FAIL) {
 			ensureWarning(judgment, now);
 		}
+	}
+
+	// 정정 이력과 관리자 행동 로그를 함께 남긴다
+	private void recordHistory(long adminId, long judgmentId, JudgmentStatus before, JudgmentStatus target,
+			String reason, LocalDateTime now) {
 		correctionRepository.save(JudgmentCorrection.of(judgmentId, before, target, reason, adminId, now));
 		actionLogRepository.save(AdminActionLog.of(adminId, AdminActionType.CORRECT_JUDGMENT, TARGET_TYPE,
 				Long.toString(judgmentId), reason, now));
+	}
 
-		Member member = memberRepository.findById(memberId).orElseThrow();
-		return CorrectedJudgment.of(judgmentId, MemberBrief.from(member), judgment.getWeekStart().toString(), target,
-				recalculationService.recalculate(memberId));
+	private Member memberOf(WeeklyJudgment judgment) {
+		return memberRepository.findById(judgment.getMemberId()).orElseThrow();
 	}
 
 	// 정정 결과는 통과·미달·면제 셋뿐이고(Q-05), 보류는 확정 전이라 정정하지 않고 재실행한다.

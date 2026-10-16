@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -22,6 +23,24 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
 	// 팀원 목록: 참가한 순서
 	List<TeamMember> findByTeamIdAndLeftAtIsNullOrderByJoinedAtAscIdAsc(long teamId);
+
+	// 팀원 목록 첫 페이지: 팀장이 맨 앞, 나머지는 참가한 순서
+	@Query("""
+			select tm from TeamMember tm
+			where tm.teamId = :teamId and tm.leftAt is null
+			order by case when tm.memberId = :leaderId then 0 else 1 end asc, tm.joinedAt asc, tm.id asc
+			""")
+	List<TeamMember> findActivePage(@Param("teamId") long teamId, @Param("leaderId") long leaderId, Pageable pageable);
+
+	// 팀원 목록 다음 페이지: 팀장은 첫 페이지에 나왔으므로 빼고, 커서(참가 시각, id) 뒤부터
+	@Query("""
+			select tm from TeamMember tm
+			where tm.teamId = :teamId and tm.leftAt is null and tm.memberId <> :leaderId
+			  and (tm.joinedAt > :joinedAt or (tm.joinedAt = :joinedAt and tm.id > :id))
+			order by tm.joinedAt asc, tm.id asc
+			""")
+	List<TeamMember> findActivePageAfter(@Param("teamId") long teamId, @Param("leaderId") long leaderId,
+			@Param("joinedAt") LocalDateTime joinedAt, @Param("id") long id, Pageable pageable);
 
 	// 내 팀 목록: 참가한 순서(오래된 순)
 	List<TeamMember> findByMemberIdAndLeftAtIsNullOrderByJoinedAtAscIdAsc(long memberId);

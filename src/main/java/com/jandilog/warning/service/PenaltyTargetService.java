@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,11 +33,12 @@ public class PenaltyTargetService {
 	// 도달한 주가 오래된 순, 같으면 회원 id 순
 	@Transactional(readOnly = true)
 	public List<Target> findTargets() {
+		List<Long> candidates = warningRepository
+				.findMemberIdsWithAliveWarningsAtLeast(WarningRecalculator.PENALTY_THRESHOLD);
+		Map<Long, WarningRecalcResult> states = recalculationService.calculateAll(candidates);
 		List<Target> targets = new ArrayList<>();
-		for (Long memberId : warningRepository
-				.findMemberIdsWithAliveWarningsAtLeast(WarningRecalculator.PENALTY_THRESHOLD)) {
-			if (recalculationService.calculate(memberId) instanceof WarningRecalcResult.Calculated state
-					&& state.penaltyTarget()) {
+		for (Long memberId : candidates) {
+			if (states.get(memberId) instanceof WarningRecalcResult.Calculated state && state.penaltyTarget()) {
 				targets.add(new Target(memberId, state.warningCount(), state.penaltyReachedWeek()));
 			}
 		}

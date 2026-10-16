@@ -4,12 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
-import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -18,37 +14,37 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.jandilog.judgment.domain.HoldReason;
 import com.jandilog.judgment.dto.GrassDay;
 
-// GitHubGrassClient의 쿼리 생성(KST→UTC 구간)과 응답 해석. 네트워크 없이 package-private 메서드를 직접 부른다
+// GitHubGrassClient의 쿼리 생성(구간 일자 → UTC 일자 경계)과 달력 응답 해석. 네트워크 없이 package-private 메서드를 직접 부른다
 class GitHubGrassClientQueryParseTest {
 
-	private static final Pattern WINDOW = Pattern
-			.compile("d(\\d+): contributionsCollection\\(from: \"([^\"]+)\", to: \"([^\"]+)\"\\)");
 	private static final LocalDate FROM = LocalDate.of(2026, 9, 28);
 
-	private record Window(int alias, Instant from, Instant to) {
-	}
-
-	private static List<Window> windows(String query) {
-		List<Window> windows = new ArrayList<>();
-		Matcher matcher = WINDOW.matcher(query);
-		while (matcher.find()) {
-			windows.add(new Window(Integer.parseInt(matcher.group(1)), Instant.parse(matcher.group(2)),
-					Instant.parse(matcher.group(3))));
-		}
-		return windows;
-	}
-
-	// d0..dN 별칭마다 totalContributions를 채운 GitHub 응답
-	static String responseOf(int... totals) {
-		StringBuilder body = new StringBuilder("{\"data\":{\"user\":{");
-		for (int i = 0; i < totals.length; i++) {
-			if (i > 0) {
-				body.append(',');
+	// from부터 하루씩 기여 수를 채운 달력 응답. 7일씩 주로 나눈다
+	static String responseOf(LocalDate from, int... counts) {
+		StringBuilder weeks = new StringBuilder();
+		for (int i = 0; i < counts.length; i++) {
+			if (i % 7 == 0) {
+				weeks.append(i > 0 ? "]}," : "").append("{\"contributionDays\":[");
 			}
-			body.append("\"d").append(i).append("\":{\"contributionCalendar\":{\"totalContributions\":")
-					.append(totals[i]).append("}}");
+			else {
+				weeks.append(',');
+			}
+			weeks.append(entry(from.plusDays(i).toString(), String.valueOf(counts[i])));
 		}
-		return body.append("}}}").toString();
+		if (counts.length > 0) {
+			weeks.append("]}");
+		}
+		return calendarOf(weeks.toString());
+	}
+
+	static String entry(String date, String count) {
+		return "{\"date\":\"" + date + "\",\"contributionCount\":" + count + "}";
+	}
+
+	// weeks 배열 안쪽을 그대로 넣는 달력 응답
+	static String calendarOf(String weeksInner) {
+		return "{\"data\":{\"user\":{\"contributionsCollection\":{\"contributionCalendar\":{\"weeks\":[" + weeksInner
+				+ "]}}}}}";
 	}
 
 	private static GrassFetchException failureOf(String body, LocalDate from, LocalDate to) {
@@ -57,103 +53,54 @@ class GitHubGrassClientQueryParseTest {
 		return (GrassFetchException) thrown;
 	}
 
-	// ---------- KST 일자 → UTC 구간 ----------
+	// ---------- 구간 일자 → UTC 일자 경계 ----------
 
 	@Test
-	void 하루_구간은_KST_0시부터_23시_59분_59초까지를_UTC로_바꾼다() {
+	void 하루_구간은_그날_UTC_0시부터_23시_59분_59초까지다() {
 		String query = GitHubGrassClient.buildQuery(FROM, FROM);
 
-		assertThat(windows(query)).containsExactly(new Window(0, Instant.parse("2026-09-27T15:00:00Z"),
-				Instant.parse("2026-09-28T14:59:59Z")));
+		assertThat(query).contains("from: \"2026-09-28T00:00:00Z\", to: \"2026-09-28T23:59:59Z\"");
 	}
 
 	@Test
-	void 일곱_날은_별칭_d0부터_d6까지_하루씩_순서대로_만든다() {
-		List<Window> windows = windows(GitHubGrassClient.buildQuery(FROM, FROM.plusDays(6)));
+	void 일곱_날은_시작일_0시부터_종료일_23시_59분_59초까지_한_구간이다() {
+		String query = GitHubGrassClient.buildQuery(FROM, FROM.plusDays(6));
 
-		assertThat(windows).hasSize(7);
-		assertThat(windows).extracting(Window::alias).containsExactly(0, 1, 2, 3, 4, 5, 6);
-		assertThat(windows.get(0).from()).isEqualTo(Instant.parse("2026-09-27T15:00:00Z"));
-		assertThat(windows.get(0).to()).isEqualTo(Instant.parse("2026-09-28T14:59:59Z"));
-		assertThat(windows.get(6).from()).isEqualTo(Instant.parse("2026-10-03T15:00:00Z"));
-		assertThat(windows.get(6).to()).isEqualTo(Instant.parse("2026-10-04T14:59:59Z"));
+		assertThat(query).contains("from: \"2026-09-28T00:00:00Z\", to: \"2026-10-04T23:59:59Z\"");
+		assertThat(query.split("contributionsCollection", -1)).hasSize(2);
 	}
 
 	@Test
-	void 이웃한_날의_구간은_빈틈도_겹침도_없다() {
-		List<Window> windows = windows(GitHubGrassClient.buildQuery(FROM, FROM.plusDays(13)));
+	void 연말연시와_윤일에서도_일자를_그대로_보낸다() {
+		String newYear = GitHubGrassClient.buildQuery(LocalDate.of(2026, 12, 31), LocalDate.of(2027, 1, 1));
+		String leapDay = GitHubGrassClient.buildQuery(LocalDate.of(2028, 2, 29), LocalDate.of(2028, 2, 29));
 
-		for (int i = 0; i + 1 < windows.size(); i++) {
-			assertThat(windows.get(i).to().plusSeconds(1)).isEqualTo(windows.get(i + 1).from());
-		}
-	}
-
-	@Test
-	void 연말연시와_윤일에서도_KST_하루를_정확히_자른다() {
-		List<Window> newYear = windows(GitHubGrassClient.buildQuery(LocalDate.of(2026, 12, 31), LocalDate.of(2027, 1, 1)));
-		List<Window> leapDay = windows(GitHubGrassClient.buildQuery(LocalDate.of(2028, 2, 29), LocalDate.of(2028, 2, 29)));
-
-		assertThat(newYear.get(0).from()).isEqualTo(Instant.parse("2026-12-30T15:00:00Z"));
-		assertThat(newYear.get(0).to()).isEqualTo(Instant.parse("2026-12-31T14:59:59Z"));
-		assertThat(newYear.get(1).from()).isEqualTo(Instant.parse("2026-12-31T15:00:00Z"));
-		assertThat(newYear.get(1).to()).isEqualTo(Instant.parse("2027-01-01T14:59:59Z"));
-		assertThat(leapDay.get(0).from()).isEqualTo(Instant.parse("2028-02-28T15:00:00Z"));
-		assertThat(leapDay.get(0).to()).isEqualTo(Instant.parse("2028-02-29T14:59:59Z"));
-	}
-
-	@Test
-	void 경계_시각은_KST_0시는_그날이고_전날_23시_59분_59초는_전날이다() {
-		List<Window> windows = windows(GitHubGrassClient.buildQuery(FROM, FROM.plusDays(1)));
-		Window monday = windows.get(0);
-		Window tuesday = windows.get(1);
-		Instant mondayStartKst = Instant.parse("2026-09-27T15:00:00Z");
-		Instant mondayLastSecondKst = Instant.parse("2026-09-28T14:59:59Z");
-		Instant sundayLastSecondKst = Instant.parse("2026-09-27T14:59:59Z");
-
-		assertThat(contains(monday, mondayStartKst)).isTrue();
-		assertThat(contains(monday, mondayLastSecondKst)).isTrue();
-		assertThat(contains(monday, sundayLastSecondKst)).isFalse();
-		assertThat(contains(monday, tuesday.from())).isFalse();
-		assertThat(contains(tuesday, tuesday.from())).isTrue();
-	}
-
-	private static boolean contains(Window window, Instant instant) {
-		return !instant.isBefore(window.from()) && !instant.isAfter(window.to());
-	}
-
-	@Test
-	void 시각_변환_도우미는_KST_0시와_다음날_0시_1초_전을_돌려준다() {
-		assertThat(GitHubGrassClient.dayStart(LocalDate.of(2026, 1, 1))).isEqualTo(Instant.parse("2025-12-31T15:00:00Z"));
-		assertThat(GitHubGrassClient.dayEnd(LocalDate.of(2026, 1, 1))).isEqualTo(Instant.parse("2026-01-01T14:59:59Z"));
+		assertThat(newYear).contains("from: \"2026-12-31T00:00:00Z\", to: \"2027-01-01T23:59:59Z\"");
+		assertThat(leapDay).contains("from: \"2028-02-29T00:00:00Z\", to: \"2028-02-29T23:59:59Z\"");
 	}
 
 	// ---------- 쿼리 모양·상한 ----------
 
 	@Test
-	void 쿼리는_로그인을_변수로만_받고_일자_수만큼_별칭을_둔다() {
+	void 쿼리는_로그인을_변수로만_받고_일자별_날짜와_기여_수만_묻는다() {
 		String query = GitHubGrassClient.buildQuery(FROM, FROM.plusDays(6));
 
 		assertThat(query).startsWith("query($login: String!) { user(login: $login) {");
 		assertThat(query).endsWith(" } }");
-		assertThat(query.split("contributionsCollection", -1)).hasSize(8);
-		assertThat(query).contains("totalContributions");
+		assertThat(query).contains("contributionDays { date contributionCount }");
+		assertThat(query).doesNotContain("totalContributions");
 	}
 
 	@Test
-	void 별칭_상한은_62일이고_62일_구간은_d0부터_d61까지_만든다() {
+	void 구간_상한은_62일이다() {
 		assertThat(GitHubGrassClient.MAX_DAYS).isEqualTo(62);
-
-		List<Window> windows = windows(GitHubGrassClient.buildQuery(FROM, FROM.plusDays(61)));
-
-		assertThat(windows).hasSize(62);
-		assertThat(windows.get(61).alias()).isEqualTo(61);
 	}
 
 	// ---------- 응답 해석 ----------
 
 	@Test
 	void 정상_응답은_일자별_기여_수로_바꾼다() {
-		List<GrassDay> days = GitHubGrassClient.parse(responseOf(0, 3, 0, 1, 0, 0, 12), FROM, FROM.plusDays(6));
+		List<GrassDay> days = GitHubGrassClient.parse(responseOf(FROM, 0, 3, 0, 1, 0, 0, 12), FROM, FROM.plusDays(6));
 
 		assertThat(days).hasSize(7);
 		assertThat(days).extracting(GrassDay::date).containsExactly(FROM, FROM.plusDays(1), FROM.plusDays(2),
@@ -163,8 +110,52 @@ class GitHubGrassClientQueryParseTest {
 	}
 
 	@Test
+	void 요청한_하루만_돌려주고_전날_기여를_합치지_않는다() {
+		// 10-05=16, 10-06=39 달력에서 10-06만 물으면 39다 (KST 하루 시각 구간을 쓰던 때는 55로 합쳐졌다)
+		LocalDate day = LocalDate.of(2026, 10, 6);
+		String body = responseOf(day.minusDays(1), 16, 39);
+
+		List<GrassDay> days = GitHubGrassClient.parse(body, day, day);
+
+		assertThat(days).containsExactly(new GrassDay(day, 39));
+	}
+
+	@Test
+	void 요청_구간_밖_일자가_섞여_있어도_구간만_돌려준다() {
+		// 주 단위로 앞뒤가 채워져 오는 경우
+		String body = responseOf(FROM.minusDays(3), 9, 9, 9, 2, 0, 5, 9, 9);
+
+		List<GrassDay> days = GitHubGrassClient.parse(body, FROM, FROM.plusDays(2));
+
+		assertThat(days).extracting(GrassDay::date).containsExactly(FROM, FROM.plusDays(1), FROM.plusDays(2));
+		assertThat(days).extracting(GrassDay::count).containsExactly(2, 0, 5);
+	}
+
+	@Test
+	void 여러_주에_걸쳐도_일자로_맞춰_읽는다() {
+		int[] counts = new int[14];
+		counts[0] = 1;
+		counts[7] = 4;
+		counts[13] = 2;
+
+		List<GrassDay> days = GitHubGrassClient.parse(responseOf(FROM, counts), FROM, FROM.plusDays(13));
+
+		assertThat(days).hasSize(14);
+		assertThat(days.get(0).count()).isEqualTo(1);
+		assertThat(days.get(7).count()).isEqualTo(4);
+		assertThat(days.get(13).count()).isEqualTo(2);
+	}
+
+	@Test
+	void 오늘_이후_일자가_0으로_와도_그대로_읽는다() {
+		List<GrassDay> days = GitHubGrassClient.parse(responseOf(FROM, 3, 0, 0), FROM, FROM.plusDays(2));
+
+		assertThat(days).extracting(GrassDay::hasGrass).containsExactly(true, false, false);
+	}
+
+	@Test
 	void 빈_errors_배열이_있어도_data가_정상이면_읽는다() {
-		String body = responseOf(2).replaceFirst("^\\{", "{\"errors\":[],");
+		String body = responseOf(FROM, 2).replaceFirst("^\\{", "{\"errors\":[],");
 
 		assertThat(GitHubGrassClient.parse(body, FROM, FROM)).extracting(GrassDay::count).containsExactly(2);
 	}
@@ -206,7 +197,9 @@ class GitHubGrassClientQueryParseTest {
 
 	@ParameterizedTest
 	@ValueSource(strings = {"", "   ", "not json", "{", "[]", "{}", "null", "\"text\"",
-			"{\"data\":null}", "{\"data\":{}}", "{\"data\":{\"user\":null}}", "{\"data\":{\"user\":[]}}"})
+			"{\"data\":null}", "{\"data\":{}}", "{\"data\":{\"user\":null}}", "{\"data\":{\"user\":[]}}",
+			"{\"data\":{\"user\":{}}}", "{\"data\":{\"user\":{\"contributionsCollection\":{}}}}",
+			"{\"data\":{\"user\":{\"contributionsCollection\":{\"contributionCalendar\":{\"weeks\":{}}}}}}"})
 	void 비었거나_형식이_이상한_응답은_API_ERROR다(String body) {
 		GrassFetchException e = failureOf(body, FROM, FROM);
 
@@ -220,26 +213,48 @@ class GitHubGrassClientQueryParseTest {
 	}
 
 	@Test
-	void 일자_별칭이_하나라도_빠지면_API_ERROR다() {
-		// d0, d1만 있고 d2가 없는 3일 요청
-		assertThat(failureOf(responseOf(1, 1), FROM, FROM.plusDays(2)).getReason()).isEqualTo(HoldReason.API_ERROR);
+	void 요청한_일자가_하나라도_빠지면_API_ERROR다() {
+		// 3일을 물었는데 앞 두 날만 온 경우
+		assertThat(failureOf(responseOf(FROM, 1, 1), FROM, FROM.plusDays(2)).getReason())
+				.isEqualTo(HoldReason.API_ERROR);
+	}
+
+	@Test
+	void 요청한_일자가_없고_다른_일자만_있어도_API_ERROR다() {
+		assertThat(failureOf(responseOf(FROM.plusDays(10), 1, 1), FROM, FROM).getReason())
+				.isEqualTo(HoldReason.API_ERROR);
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = {"\"5\"", "1.5", "null", "-1", "true", "{}", "3000000000"})
-	void 기여_수가_정수가_아니거나_범위를_벗어나면_API_ERROR다(String total) {
-		String body = "{\"data\":{\"user\":{\"d0\":{\"contributionCalendar\":{\"totalContributions\":" + total + "}}}}}";
+	void 기여_수가_정수가_아니거나_범위를_벗어나면_API_ERROR다(String count) {
+		String body = calendarOf("{\"contributionDays\":[" + entry(FROM.toString(), count) + "]}");
 
 		assertThat(failureOf(body, FROM, FROM).getReason()).isEqualTo(HoldReason.API_ERROR);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"", "2026-9-28", "28/09/2026", "not-a-date", "2026-02-30"})
+	void 일자_형식이_이상하면_API_ERROR다(String date) {
+		String body = calendarOf("{\"contributionDays\":[" + entry(date, "1") + "]}");
+
+		GrassFetchException e = failureOf(body, FROM, FROM);
+
+		assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
+		assertThat(e.isRetryable()).isTrue();
 	}
 
 	@Test
 	void 예외_메시지에_응답_본문을_싣지_않는다() {
 		String body = "{\"errors\":[{\"type\":\"RATE_LIMITED\",\"message\":\"SECRET-ECHO-ghp_leaked_value\"}]}";
 		String garbage = "SECRET-ECHO-ghp_leaked_value <html>";
+		String badDate = calendarOf("{\"contributionDays\":[" + entry("SECRET-ECHO-ghp_leaked_value", "1") + "]}");
 
 		GrassFetchException typed = failureOf(body, FROM, FROM);
 		assertThatThrownBy(() -> GitHubGrassClient.parse(garbage, FROM, FROM))
+				.isInstanceOf(GrassFetchException.class)
+				.hasMessageNotContaining("SECRET-ECHO");
+		assertThatThrownBy(() -> GitHubGrassClient.parse(badDate, FROM, FROM))
 				.isInstanceOf(GrassFetchException.class)
 				.hasMessageNotContaining("SECRET-ECHO");
 

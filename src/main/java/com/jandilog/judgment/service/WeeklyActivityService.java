@@ -70,33 +70,70 @@ public class WeeklyActivityService {
 	public WeeklyActivityResponse weeklyActivity(long memberId, String weekStartText) {
 		LocalDate thisWeek = JudgmentWeek.mondayOf(LocalDate.now(clock.withZone(KST)));
 		LocalDate weekStart = parseWeekStart(weekStartText, thisWeek);
-		LocalDate weekEnd = weekStart.plusDays(6);
-		boolean currentWeek = weekStart.equals(thisWeek);
 
 		Member member = memberRepository.findById(memberId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 		WeeklyJudgment judgment = judgmentRepository.findByMemberIdAndWeekStart(memberId, weekStart).orElse(null);
-		boolean inTeam = sourceRepository.hasCurrentTeam(memberId);
+		Week week = new Week(memberId, member, weekStart, weekStart.equals(thisWeek),
+				sourceRepository.hasCurrentTeam(memberId), judgment);
 
-		List<JudgmentDay> storedDays = judgment != null && judgment.isConfirmed()
+		List<JudgmentDay> storedDays = storedDays(judgment);
+		return storedDays.size() == 7 ? storedWeek(week, storedDays) : liveWeek(week);
+	}
+
+	// 판정 시점 값은 통과·미달 주에만 쓴다. 정정·소급 면제로 면제가 된 주는 예전 수치가 남아 있어도 새로 계산해 보여준다
+	private List<JudgmentDay> storedDays(WeeklyJudgment judgment) {
+		return judgment != null && judgment.getStatus().showsCounts()
 				? dayRepository.findByJudgmentIdOrderByDay(judgment.getId())
 				: List.of();
-		if (storedDays.size() == 7) {
-			// 판정 시점에 저장한 값. 잔디 캐시는 이미 사라졌다
-			List<ActivityDayResponse> days = storedDays.stream()
-					.map(d -> new ActivityDayResponse(d.getDay().toString(), d.isHasGrass(), null, d.isHasRecord(),
-							null))
-					.toList();
-			return new WeeklyActivityResponse(weekStart.toString(), weekEnd.toString(), currentWeek, inTeam, days,
-					judgment.getVerifiedDays(), judgment.getRecordCount() == null ? 0 : judgment.getRecordCount(),
-					JudgmentCalculator.REQUIRED_VERIFIED_DAYS, JudgmentCalculator.REQUIRED_RECORD_COUNT, null, true,
-					null, null, WeekJudgmentResponse.from(judgment));
-		}
+	}
 
-		Map<LocalDate, Integer> posts = sourceRepository.countRecordPostsByDay(memberId, weekStart, weekEnd);
-		// 캐시는 지난 주 월요일부터만 덮는다. 그보다 오래된 주는 잔디를 알 수 없는 것으로 본다 (0칸으로 오해하지 않게)
-		GrassSnapshot snapshot = grassCacheService.findLatest(memberId)
-				.filter(s -> !s.from().isAfter(weekStart))
+	// 판정 시점에 저장한 값. 잔디 캐시는 이미 사라졌다
+	private static WeeklyActivityResponse storedWeek(Week week, List<JudgmentDay> storedDays) {
+		List<ActivityDayResponse> days = storedDays.stream()
+				.map(d -> new ActivityDayResponse(d.getDay().toString(), d.isHasGrass(), null, d.isHasRecord(), null))
+				.toList();
+		WeeklyJudgment judgment = week.judgment();
+		return new WeeklyActivityResponse(week.weekStart().toString(), week.weekEnd().toString(), week.currentWeek(),
+				week.inTeam(), days, judgment.getVerifiedDays(),
+				judgment.getRecordCount() == null ? 0 : judgment.getRecordCount(),
+				JudgmentCalculator.REQUIRED_VERIFIED_DAYS, JudgmentCalculator.REQUIRED_RECORD_COUNT, null, true, null,
+				null, WeekJudgmentResponse.from(judgment));
+	}
+
+	// 저장된 값이 없는 주: 기록글 수는 실시간, 인증일·잔디는 캐시로 계산한다
+	private WeeklyActivityResponse liveWeek(Week week) {
+		Map<LocalDate, Integer> posts = sourceRepository.countRecordPostsByDay(week.memberId(), week.weekStart(),
+				week.weekEnd());
+		GrassSnapshot snapshot = grassOfWeek(week);
+		WeekTally tally = tally(week.weekStart(), posts, snapshot);
+
+		// 잔디를 못 불러왔으면 인증일을 알 수 없다 (E-32)
+		Integer verifiedDays = snapshot == null ? null : tally.verified();
+		Boolean passExpected = week.currentWeek() && verifiedDays != null
+				? verifiedDays >= JudgmentCalculator.REQUIRED_VERIFIED_DAYS
+						&& tally.recordCount() >= JudgmentCalculator.REQUIRED_RECORD_COUNT
+				: null;
+		ActivityBanner banner = week.currentWeek()
+				? banner(week.member(), week.weekStart(), snapshot, tally.recordCount())
+				: null;
+
+		return new WeeklyActivityResponse(week.weekStart().toString(), week.weekEnd().toString(), week.currentWeek(),
+				week.inTeam(), tally.days(), verifiedDays, tally.recordCount(),
+				JudgmentCalculator.REQUIRED_VERIFIED_DAYS, JudgmentCalculator.REQUIRED_RECORD_COUNT, passExpected,
+				snapshot != null,
+				snapshot == null ? null : DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(snapshot.fetchedAt()), banner,
+				week.judgment() == null ? null : WeekJudgmentResponse.from(week.judgment()));
+	}
+
+	// 캐시는 지난 주 월요일부터만 덮는다. 그보다 오래된 주는 잔디를 알 수 없는 것으로 본다 (0칸으로 오해하지 않게)
+	private GrassSnapshot grassOfWeek(Week week) {
+		return grassCacheService.findLatest(week.memberId())
+				.filter(s -> !s.from().isAfter(week.weekStart()))
 				.orElse(null);
+	}
+
+	// 월~일 7일의 일자별 응답과 기록글 수·인증일 수. 잔디가 있거나 기록글이 있으면 인증일이다
+	private static WeekTally tally(LocalDate weekStart, Map<LocalDate, Integer> posts, GrassSnapshot snapshot) {
 		Map<LocalDate, GrassDay> grassByDay = new HashMap<>();
 		if (snapshot != null) {
 			snapshot.days().forEach(day -> grassByDay.put(day.date(), day));
@@ -116,19 +153,19 @@ public class WeeklyActivityService {
 			days.add(new ActivityDayResponse(date.toString(), grass == null ? null : grass.hasGrass(),
 					grass == null ? null : grass.count(), posted > 0, posted));
 		}
-		// 잔디를 못 불러왔으면 인증일을 알 수 없다 (E-32)
-		Integer verifiedDays = snapshot == null ? null : verified;
-		Boolean passExpected = currentWeek && verifiedDays != null
-				? verifiedDays >= JudgmentCalculator.REQUIRED_VERIFIED_DAYS
-						&& recordCount >= JudgmentCalculator.REQUIRED_RECORD_COUNT
-				: null;
-		ActivityBanner banner = currentWeek ? banner(member, weekStart, snapshot, recordCount) : null;
+		return new WeekTally(days, recordCount, verified);
+	}
 
-		return new WeeklyActivityResponse(weekStart.toString(), weekEnd.toString(), currentWeek, inTeam, days,
-				verifiedDays, recordCount, JudgmentCalculator.REQUIRED_VERIFIED_DAYS,
-				JudgmentCalculator.REQUIRED_RECORD_COUNT, passExpected, snapshot != null,
-				snapshot == null ? null : DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(snapshot.fetchedAt()), banner,
-				judgment == null ? null : WeekJudgmentResponse.from(judgment));
+	// 조회 대상 주와 그 주를 보여주는 데 쓰는 값 묶음. judgment는 판정 전이면 null
+	private record Week(long memberId, Member member, LocalDate weekStart, boolean currentWeek, boolean inTeam,
+			WeeklyJudgment judgment) {
+
+		LocalDate weekEnd() {
+			return weekStart.plusDays(6);
+		}
+	}
+
+	private record WeekTally(List<ActivityDayResponse> days, int recordCount, int verified) {
 	}
 
 	// 지난 판정 목록: 최근 주부터 커서 기반 20개. 커서는 마지막 행 주차를 감싼 불투명 문자열 (Q-06)
@@ -139,10 +176,12 @@ public class WeeklyActivityService {
 				before, PageRequest.of(0, PAGE_SIZE + 1));
 		boolean hasNext = rows.size() > PAGE_SIZE;
 		List<WeeklyJudgment> page = hasNext ? rows.subList(0, PAGE_SIZE) : rows;
+		// 제외·면제·보류 주는 인증일·기록글을 "—"(null)로 둔다. 저장된 값은 지우지 않아 통과·미달로 되돌리면 다시 보인다
 		List<JudgmentHistoryItem> items = page.stream()
 				.map(j -> new JudgmentHistoryItem(j.getWeekStart().toString(), j.getWeekStart().plusDays(6).toString(),
-						j.getStatus(), j.getSkipReason(), j.getHoldReason(), j.getVerifiedDays(), j.getRecordCount(),
-						j.isCorrected()))
+						j.getStatus(), j.getSkipReason(), j.getHoldReason(),
+						j.getStatus().showsCounts() ? j.getVerifiedDays() : null,
+						j.getStatus().showsCounts() ? j.getRecordCount() : null, j.isCorrected()))
 				.toList();
 		String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1).getWeekStart()) : null;
 		return new JudgmentHistoryPage(items, nextCursor);
