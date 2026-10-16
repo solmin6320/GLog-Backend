@@ -15,6 +15,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.PageSlice;
 
 // 팀원·초대 목록 커서: 20개 경계와 커서 해석 (기능명세서 10장 페이지네이션, Q-06)
 class TeamCursorTest {
@@ -40,36 +41,36 @@ class TeamCursorTest {
 
 	@Test
 	void 빈_목록은_항목도_다음_커서도_없다() {
-		List<Integer> rows = rows(0);
+		PageSlice<Integer> page = TeamCursor.slice(rows(0), TeamCursorTest::cursorOf);
 
-		assertThat(TeamCursor.trim(rows)).isEmpty();
-		assertThat(TeamCursor.nextOf(rows, TeamCursorTest::cursorOf)).isNull();
+		assertThat(page.rows()).isEmpty();
+		assertThat(page.nextCursor()).isNull();
 	}
 
 	@Test
 	void 정확히_20개면_다음_커서가_없다() {
-		List<Integer> rows = rows(20);
+		PageSlice<Integer> page = TeamCursor.slice(rows(20), TeamCursorTest::cursorOf);
 
-		assertThat(TeamCursor.trim(rows)).hasSize(20);
-		assertThat(TeamCursor.nextOf(rows, TeamCursorTest::cursorOf)).isNull();
+		assertThat(page.rows()).hasSize(20);
+		assertThat(page.nextCursor()).isNull();
 	}
 
 	@Test
 	void 한_건_더_읽혔으면_20개만_남기고_20번째_행으로_다음_커서를_만든다() {
-		List<Integer> rows = rows(21);
+		PageSlice<Integer> page = TeamCursor.slice(rows(21), TeamCursorTest::cursorOf);
 
-		assertThat(TeamCursor.trim(rows)).containsExactlyElementsOf(rows(20));
-		String next = TeamCursor.nextOf(rows, TeamCursorTest::cursorOf);
+		assertThat(page.rows()).containsExactlyElementsOf(rows(20));
+		String next = page.nextCursor();
 		assertThat(next).isNotNull();
 		assertThat(TeamCursor.parse(next)).isEqualTo(cursorOf(20));
 	}
 
 	@Test
 	void 한_건_읽힌_목록은_그대로이고_다음_커서가_없다() {
-		List<Integer> rows = rows(1);
+		PageSlice<Integer> page = TeamCursor.slice(rows(1), TeamCursorTest::cursorOf);
 
-		assertThat(TeamCursor.trim(rows)).containsExactly(1);
-		assertThat(TeamCursor.nextOf(rows, TeamCursorTest::cursorOf)).isNull();
+		assertThat(page.rows()).containsExactly(1);
+		assertThat(page.nextCursor()).isNull();
 	}
 
 	// ----- 커서 해석 -----
@@ -79,6 +80,13 @@ class TeamCursorTest {
 		TeamCursor cursor = new TeamCursor(LocalDateTime.of(2026, 1, 2, 3, 4, 0), 4_000_000_000L);
 
 		assertThat(TeamCursor.parse(cursor.encode())).isEqualTo(cursor);
+	}
+
+	@Test
+	void 커서_문자열은_시각과_id를_Base64url로_감싼_형식_그대로다() {
+		TeamCursor cursor = new TeamCursor(LocalDateTime.of(2026, 10, 8, 9, 30, 0), 7L);
+
+		assertThat(cursor.encode()).isEqualTo(wrap("2026-10-08T09:30:00|7"));
 	}
 
 	@Test

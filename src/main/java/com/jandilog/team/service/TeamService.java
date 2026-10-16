@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
+import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.member.domain.Member;
 import com.jandilog.member.repository.MemberRepository;
 import com.jandilog.post.dto.CursorPage;
@@ -128,18 +129,17 @@ public class TeamService {
 				? teamMemberRepository.findActivePage(teamId, team.getLeaderId(), TeamCursor.fetchSize())
 				: teamMemberRepository.findActivePageAfter(teamId, team.getLeaderId(), after.time(), after.id(),
 						TeamCursor.fetchSize());
-		String nextCursor = TeamCursor.nextOf(rows, row -> new TeamCursor(row.getJoinedAt(), row.getId()));
-		List<TeamMember> page = TeamCursor.trim(rows);
-		Map<Long, Member> members = membersById(page.stream().map(TeamMember::getMemberId).toList());
+		PageSlice<TeamMember> page = TeamCursor.slice(rows, row -> new TeamCursor(row.getJoinedAt(), row.getId()));
+		Map<Long, Member> members = membersById(page.rows().stream().map(TeamMember::getMemberId).toList());
 
 		List<TeamMemberResponse> items = new ArrayList<>();
-		for (TeamMember row : page) {
+		for (TeamMember row : page.rows()) {
 			Member member = members.get(row.getMemberId());
 			if (member != null) {
 				items.add(TeamMemberResponse.of(member, team.isLeader(row.getMemberId()), row.getJoinedAt()));
 			}
 		}
-		return new CursorPage<>(items, nextCursor);
+		return new CursorPage<>(items, page.nextCursor());
 	}
 
 	// 초대코드 재확인: 그 팀의 팀장만. 재발급은 없고 처음 정해진 코드를 그대로 보여준다 (Q-01)
