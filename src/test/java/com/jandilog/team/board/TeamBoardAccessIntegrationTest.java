@@ -118,13 +118,33 @@ class TeamBoardAccessIntegrationTest extends TeamBoardTestBase {
 
 	@ParameterizedTest
 	@ValueSource(booleans = {true, false})
-	void 관리자도_소속이_아니면_공개든_비공개든_현황판을_볼_수_없다(boolean isPublic) {
+	void 관리자는_소속이_아니어도_공개든_비공개든_현황판을_본다(boolean isPublic) {
 		TeamRef team = isPublic ? publicTeam : createTeam(leader, false);
 		long admin = admin();
 
-		assertDenied(boardResponse(admin, team.id()), ErrorCode.FORBIDDEN);
-		assertDenied(graphQl.post(bearerFor(admin), TEAM_SUMMARY_QUERY, Map.of("id", Long.toString(team.id()))),
+		JsonNode board = board(admin, team.id());
+
+		// 관리자는 팀원이 아니라 목록에 없고, 내 행도 없다
+		assertThat(memberIdsOf(board)).contains(leader).doesNotContain(admin);
+		board.path("members").forEach(row -> assertThat(row.path("isMe").asBoolean()).isFalse());
+	}
+
+	// team 조회는 응답의 joinedAt 때문에 관리자 허용을 보류했다 (TM-01 ⑧ 이번 주 요약도 team 아래에 있다)
+	@Test
+	void team_조회로는_관리자도_소속이_아니면_이번_주_요약을_받지_못한다() {
+		assertDenied(graphQl.post(bearerFor(admin()), TEAM_SUMMARY_QUERY, Map.of("id", Long.toString(publicTeam.id()))),
 				ErrorCode.FORBIDDEN);
+	}
+
+	@Test
+	void 팀장이어도_다른_팀의_현황판은_볼_수_없다() {
+		long otherLeader = member();
+		TeamRef other = createTeam(otherLeader, false);
+		settleFirstWeek(otherLeader);
+
+		assertDenied(boardResponse(otherLeader, publicTeam.id()), ErrorCode.FORBIDDEN);
+		assertDenied(boardResponse(leader, other.id()), ErrorCode.FORBIDDEN);
+		assertDenied(boardResponse(outsider, other.id()), ErrorCode.FORBIDDEN);
 	}
 
 	@Test
