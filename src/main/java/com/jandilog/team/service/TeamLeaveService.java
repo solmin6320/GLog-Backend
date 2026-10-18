@@ -74,13 +74,13 @@ public class TeamLeaveService {
 		return teamService.response(team, leaderId, mine.getJoinedAt());
 	}
 
-	// 팀원 추방(팀장만): 소속을 KICKED로 닫고, 그 팀 경고 카테고리를 빼고(남은 카테고리가 없으면 경고 삭제 표시),
-	// Redis에 1년 차단 키를 건다. 팀장 본인은 추방할 수 없다
+	// 팀원 추방(팀장 또는 시스템 관리자): 소속을 KICKED로 닫고, 그 팀 경고 카테고리를 빼고(남은 카테고리가 없으면 경고 삭제 표시),
+	// Redis에 1년 차단 키를 건다. 팀장은 누가 시켜도 추방할 수 없다(위임 후 추방)
 	@Transactional(isolation = Isolation.READ_COMMITTED)
-	public void kick(long leaderId, long teamId, long targetId) {
+	public void kick(long actorId, long teamId, long targetId) {
 		Team team = access.requireAliveForUpdate(teamId);
-		access.requireLeader(team, leaderId);
-		if (targetId == leaderId) {
+		boolean asAdmin = access.requireLeaderOrAdmin(team, actorId);
+		if (team.isLeader(targetId)) {
 			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
 		TeamMember target = teamMemberRepository.findByTeamIdAndMemberIdAndLeftAtIsNull(teamId, targetId)
@@ -92,15 +92,18 @@ public class TeamLeaveService {
 		warningService.removeCategoryOnKick(targetId, teamId, now);
 		// 마지막 단계: Redis가 실패하면 앞선 DB 변경도 롤백된다
 		banService.ban(teamId, targetId, now);
+		if (asAdmin) {
+			access.logAdminUse("추방", actorId, teamId, targetId);
+		}
 	}
 
-	// 팀 삭제(팀장만): 팀 행은 deleted_at만 찍고 남긴다. 소속은 TEAM_DELETED로 닫고,
+	// 팀 삭제(팀장 또는 시스템 관리자): 팀 행은 deleted_at만 찍고 남긴다. 소속은 TEAM_DELETED로 닫고,
 	// 경고 카테고리를 빼고, 글의 팀 연결은 Mongo·post_index 모두 끊는다 (DB명세서 4-4, E-21·E-22).
 	// 대기 중인 초대는 그대로 두고, 수락 시점에 E-18로 정리한다
 	@Transactional(isolation = Isolation.READ_COMMITTED)
-	public void delete(long leaderId, long teamId) {
+	public void delete(long actorId, long teamId) {
 		Team team = access.requireAliveForUpdate(teamId);
-		access.requireLeader(team, leaderId);
+		boolean asAdmin = access.requireLeaderOrAdmin(team, actorId);
 		LocalDateTime now = now();
 
 		team.markDeleted(now);
@@ -114,6 +117,9 @@ public class TeamLeaveService {
 		warningService.removeCategoriesOnTeamDelete(teamId, now);
 		// 마지막 단계: Mongo가 실패하면 앞선 MariaDB 변경도 롤백된다
 		postLinkService.unlinkTeam(teamId);
+		if (asAdmin) {
+			access.logAdminUse("팀 삭제", actorId, teamId, null);
+		}
 	}
 
 	private LocalDateTime now() {

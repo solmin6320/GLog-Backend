@@ -18,7 +18,7 @@ import com.jandilog.team.board.service.TeamBoardService;
 import com.jandilog.team.dto.TeamResponse;
 import com.jandilog.team.service.TeamAccessService;
 
-// 팀 현황판(TM-05)과 내 팀 목록의 이번 주 요약(TM-01 ⑧). 현황판 열람 권한 검사는 서비스가 팀을 읽어서 한다(관리자도 예외 없음)
+// 팀 현황판(TM-05)과 내 팀 목록의 이번 주 요약(TM-01 ⑧). 현황판 열람 권한 검사는 서비스가 팀을 읽어서 한다(그 팀 팀원·팀장과 시스템 관리자)
 @Controller
 public class TeamBoardController {
 

@@ -117,11 +117,11 @@ public class TeamService {
 		return response(team, viewerId, membership.getJoinedAt());
 	}
 
-	// 팀원 목록: 팀장이 맨 앞, 나머지는 참가한 순서. 그 팀의 팀원·팀장만. 커서 기반 20개 (Q-06)
+	// 팀원 목록: 팀장이 맨 앞, 나머지는 참가한 순서. 그 팀의 팀원·팀장과 시스템 관리자만. 커서 기반 20개 (Q-06)
 	@Transactional(readOnly = true)
 	public CursorPage<TeamMemberResponse> members(long viewerId, long teamId, String cursor) {
 		Team team = access.requireAlive(teamId);
-		access.requireMembership(teamId, viewerId);
+		access.requireMemberOrAdmin(teamId, viewerId);
 		TeamCursor after = TeamCursor.parse(cursor);
 
 		// 한 건 더 읽어서 다음 페이지가 있는지 판단한다. 팀장은 첫 페이지에만 나온다
@@ -142,11 +142,13 @@ public class TeamService {
 		return new CursorPage<>(items, page.nextCursor());
 	}
 
-	// 초대코드 재확인: 그 팀의 팀장만. 재발급은 없고 처음 정해진 코드를 그대로 보여준다 (Q-01)
+	// 초대코드 재확인: 그 팀의 팀장과 시스템 관리자만. 재발급은 없고 처음 정해진 코드를 그대로 보여준다 (Q-01)
 	@Transactional(readOnly = true)
 	public String inviteCode(long viewerId, long teamId) {
 		Team team = access.requireAlive(teamId);
-		access.requireLeader(team, viewerId);
+		if (access.requireLeaderOrAdmin(team, viewerId)) {
+			access.logAdminUse("초대코드 확인", viewerId, teamId, null);
+		}
 		return team.getInviteCode();
 	}
 
