@@ -22,6 +22,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
 	Optional<Member> findByGithubId(long githubId);
 
+	// 권한 확인용 존재 검사. 회원을 엔티티로 읽지 않아 영속성 컨텍스트에 남지 않는다
+	boolean existsByIdAndStatusAndRole(long id, MemberStatus status, MemberRole role);
+
 	// 가입 승인 목록: id 오름차순 키셋 페이징. pattern은 소문자 LIKE 패턴, 이스케이프 문자는 '!'
 	@Query("""
 			select m from Member m

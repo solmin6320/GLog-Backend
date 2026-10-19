@@ -236,12 +236,14 @@ class TeamLeaveTransferIntegrationTest extends TeamIntegrationTest {
 		long teammate = joinedMember(team);
 		long other = joinedMember(team);
 		long outsider = member();
-		long admin = adminMember();
+		long otherLeader = member();
+		newTeam(otherLeader);
 
 		assertApiError(() -> leaveService.transferLeadership(teammate, team.id(), other), ErrorCode.FORBIDDEN);
 		assertApiError(() -> leaveService.transferLeadership(teammate, team.id(), teammate), ErrorCode.FORBIDDEN);
 		assertApiError(() -> leaveService.transferLeadership(outsider, team.id(), other), ErrorCode.FORBIDDEN);
-		assertApiError(() -> leaveService.transferLeadership(admin, team.id(), other), ErrorCode.FORBIDDEN);
+		// 다른 팀의 팀장은 이 팀에서 팀장이 아니다
+		assertApiError(() -> leaveService.transferLeadership(otherLeader, team.id(), other), ErrorCode.FORBIDDEN);
 
 		assertThat(teamService.get(leader, team.id()).isLeader()).isTrue();
 	}
