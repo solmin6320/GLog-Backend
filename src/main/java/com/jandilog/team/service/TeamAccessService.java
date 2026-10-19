@@ -1,5 +1,6 @@
 package com.jandilog.team.service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -18,7 +19,8 @@ import com.jandilog.team.repository.TeamRepository;
 
 // 팀 컨텍스트 권한 검사. 팀장 전용·팀원 전용은 @PreAuthorize가 아니라 팀을 읽어서 정한다 (기능명세서 2장).
 // 없는/삭제된 팀은 E-53, 팀원이 아니거나 팀장이 아니면 E-09.
-// 시스템 관리자(ACTIVE + ADMIN)는 ...OrAdmin 검사에서만 모든 팀에 통과하고, 나머지 검사(참가·탈퇴·글 연결 등)에는 예외가 없다
+// 시스템 관리자(ACTIVE + ADMIN)는 ...OrAdmin 검사에서만 모든 팀에 통과하고, 나머지 검사(참가·탈퇴·글 연결 등)에는 예외가 없다.
+// 팀 글·댓글 관리(requireLeader 직접 호출)와 개인 면제 요청도 관리자 예외가 없다 (2026-10-19 사용자 결정)
 @Service
 public class TeamAccessService {
 
@@ -93,7 +95,19 @@ public class TeamAccessService {
 		}
 	}
 
-	// 관리자 권한으로 쓴 팀 기능을 서버 로그에만 남긴다 (관리자 행동 로그 테이블은 만들지 않는다). 숫자 id만 적는다
+	// 응답에 싣는 "내가 참가한 시각". 팀원이면 실제 시각, 팀원이 아닌 시스템 관리자는 null, 그 밖은 E-09
+	public LocalDateTime requireJoinedAtOrAdmin(long teamId, long memberId) {
+		Optional<TeamMember> membership = teamMemberRepository.findByTeamIdAndMemberIdAndLeftAtIsNull(teamId, memberId);
+		if (membership.isPresent()) {
+			return membership.get().getJoinedAt();
+		}
+		if (isAdmin(memberId)) {
+			return null;
+		}
+		throw new ApiException(ErrorCode.FORBIDDEN);
+	}
+
+	// 관리자 권한으로 쓴 팀 기능을 서버 로그에 남긴다. 추방·팀 삭제는 admin_action_log에도 따로 남긴다. 숫자 id만 적는다
 	public void logAdminUse(String action, long adminId, long teamId, Long targetId) {
 		log.info("관리자 팀 기능 사용: action={}, adminId={}, teamId={}, targetId={}", action, adminId, teamId, targetId);
 	}

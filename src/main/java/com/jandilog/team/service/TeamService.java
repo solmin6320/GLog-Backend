@@ -109,12 +109,12 @@ public class TeamService {
 		return result;
 	}
 
-	// 팀 기본 정보. 그 팀의 팀원·팀장만 (E-09), 없는/삭제된 팀은 E-53
+	// 팀 기본 정보. 그 팀의 팀원·팀장과 시스템 관리자만 (그 밖은 E-09), 없는/삭제된 팀은 E-53.
+	// 팀원이 아닌 시스템 관리자의 joinedAt은 null이다
 	@Transactional(readOnly = true)
 	public TeamResponse get(long viewerId, long teamId) {
 		Team team = access.requireAlive(teamId);
-		TeamMember membership = access.requireMembership(teamId, viewerId);
-		return response(team, viewerId, membership.getJoinedAt());
+		return response(team, viewerId, access.requireJoinedAtOrAdmin(teamId, viewerId));
 	}
 
 	// 팀원 목록: 팀장이 맨 앞, 나머지는 참가한 순서. 그 팀의 팀원·팀장과 시스템 관리자만. 커서 기반 20개 (Q-06)
@@ -152,17 +152,20 @@ public class TeamService {
 		return team.getInviteCode();
 	}
 
-	// 공개 설정 변경(팀장만). 팀 이름·소개 수정은 명세에 없다 (기능명세서 2장)
+	// 공개 설정 변경(팀장 또는 시스템 관리자). 팀 이름·소개 수정은 명세에 없다 (기능명세서 2장)
 	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public TeamResponse update(long viewerId, long teamId, UpdateTeamInput input) {
 		Team team = access.requireAliveForUpdate(teamId);
-		access.requireLeader(team, viewerId);
+		boolean asAdmin = access.requireLeaderOrAdmin(team, viewerId);
 
 		team.changeVisibility(input.isPublic());
 		teamRepository.saveAndFlush(team);
 
-		TeamMember membership = access.requireMembership(teamId, viewerId);
-		return response(team, viewerId, membership.getJoinedAt());
+		TeamResponse response = response(team, viewerId, access.requireJoinedAtOrAdmin(teamId, viewerId));
+		if (asAdmin) {
+			access.logAdminUse("공개 설정 변경", viewerId, teamId, null);
+		}
+		return response;
 	}
 
 	TeamResponse response(Team team, long viewerId, LocalDateTime joinedAt) {

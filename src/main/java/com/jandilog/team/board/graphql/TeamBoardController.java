@@ -35,7 +35,7 @@ public class TeamBoardController {
 		return boardService.teamBoard(member.id(), TeamAccessService.parseTeamId(teamId));
 	}
 
-	// Team 객체는 팀원 본인에게만 내려가는 쿼리·뮤테이션에서 나오므로, 목록 전체를 쿼리 몇 번으로 센다
+	// Team 객체는 팀원 본인과 시스템 관리자에게만 내려가는 쿼리·뮤테이션에서 나오므로, 목록 전체를 쿼리 몇 번으로 센다
 	@BatchMapping(typeName = "Team", field = "weekSummary")
 	public Map<TeamResponse, TeamWeekSummaryResponse> weekSummary(List<TeamResponse> teams) {
 		Map<Long, TeamWeekSummaryResponse> summaries = boardService

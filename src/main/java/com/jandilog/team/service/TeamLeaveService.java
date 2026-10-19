@@ -67,12 +67,12 @@ public class TeamLeaveService {
 		membership.leave(now(), TeamLeaveType.SELF);
 	}
 
-	// 팀장 넘기기: 현재 팀원에게만. 되돌릴 수 없고, 넘긴 사람은 일반 팀원이 된다
+	// 팀장 넘기기(팀장 또는 시스템 관리자): 현재 팀원에게만. 되돌릴 수 없고, 넘긴 사람은 일반 팀원이 된다
 	@Transactional(isolation = Isolation.READ_COMMITTED)
-	public TeamResponse transferLeadership(long leaderId, long teamId, long newLeaderId) {
+	public TeamResponse transferLeadership(long actorId, long teamId, long newLeaderId) {
 		Team team = access.requireAliveForUpdate(teamId);
-		access.requireLeader(team, leaderId);
-		if (newLeaderId == leaderId) {
+		boolean asAdmin = access.requireLeaderOrAdmin(team, actorId);
+		if (team.isLeader(newLeaderId)) {
 			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
 		if (!teamMemberRepository.existsByTeamIdAndMemberIdAndLeftAtIsNull(teamId, newLeaderId)) {
@@ -80,8 +80,11 @@ public class TeamLeaveService {
 		}
 		team.changeLeader(newLeaderId);
 		teamRepository.saveAndFlush(team);
-		TeamMember mine = access.requireMembership(teamId, leaderId);
-		return teamService.response(team, leaderId, mine.getJoinedAt());
+		TeamResponse response = teamService.response(team, actorId, access.requireJoinedAtOrAdmin(teamId, actorId));
+		if (asAdmin) {
+			access.logAdminUse("팀장 위임", actorId, teamId, newLeaderId);
+		}
+		return response;
 	}
 
 	// 팀원 추방(팀장 또는 시스템 관리자): 소속을 KICKED로 닫고, 그 팀 경고 카테고리를 빼고(남은 카테고리가 없으면 경고 삭제 표시),

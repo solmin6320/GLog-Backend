@@ -11,7 +11,7 @@ extend type Query {
 }
 
 extend type Team {
-    "이번 주 요약 (TM-01 ⑧). 내 팀 목록에서 팀마다 불러도 쿼리가 팀 수만큼 늘지 않는다"
+    "이번 주 요약 (TM-01 ⑧). 내 팀 목록에서 팀마다 불러도 쿼리가 팀 수만큼 늘지 않는다. 팀 조회가 허용된 시스템 관리자에게도 열린다"
     weekSummary: TeamWeekSummary!
 }
 
