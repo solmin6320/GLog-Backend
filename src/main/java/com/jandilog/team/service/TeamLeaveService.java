@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.jandilog.admin.domain.AdminActionLog;
+import com.jandilog.admin.domain.AdminActionType;
+import com.jandilog.admin.repository.AdminActionLogRepository;
 import com.jandilog.common.exception.ApiException;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.team.domain.Team;
@@ -23,6 +26,10 @@ import com.jandilog.team.repository.TeamRepository;
 @Service
 public class TeamLeaveService {
 
+	// admin_action_log.target_type 값. 추방은 끝난 team_member 행의 id, 팀 삭제는 team의 id
+	private static final String TARGET_TYPE_TEAM_MEMBER = "TEAM_MEMBER";
+	private static final String TARGET_TYPE_TEAM = "TEAM";
+
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamAccessService access;
@@ -30,11 +37,13 @@ public class TeamLeaveService {
 	private final TeamBanService banService;
 	private final TeamWarningService warningService;
 	private final TeamPostLinkService postLinkService;
+	private final AdminActionLogRepository actionLogRepository;
 	private final Clock clock;
 
 	public TeamLeaveService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository,
 			TeamAccessService access, TeamService teamService, TeamBanService banService,
-			TeamWarningService warningService, TeamPostLinkService postLinkService, Clock clock) {
+			TeamWarningService warningService, TeamPostLinkService postLinkService,
+			AdminActionLogRepository actionLogRepository, Clock clock) {
 		this.teamRepository = teamRepository;
 		this.teamMemberRepository = teamMemberRepository;
 		this.access = access;
@@ -42,6 +51,7 @@ public class TeamLeaveService {
 		this.banService = banService;
 		this.warningService = warningService;
 		this.postLinkService = postLinkService;
+		this.actionLogRepository = actionLogRepository;
 		this.clock = clock;
 	}
 
@@ -90,6 +100,10 @@ public class TeamLeaveService {
 		target.leave(now, TeamLeaveType.KICKED);
 		teamMemberRepository.flush();
 		warningService.removeCategoryOnKick(targetId, teamId, now);
+		// 관리자 권한으로 추방했으면 같은 트랜잭션에 기록한다 (대상은 끝난 소속 행). Redis 앞에 둬서 DB 실패가 키를 남기지 않게 한다
+		if (asAdmin) {
+			recordAdminAction(actorId, AdminActionType.KICK_MEMBER, TARGET_TYPE_TEAM_MEMBER, target.getId(), now);
+		}
 		// 마지막 단계: Redis가 실패하면 앞선 DB 변경도 롤백된다
 		banService.ban(teamId, targetId, now);
 		if (asAdmin) {
@@ -115,11 +129,21 @@ public class TeamLeaveService {
 		teamMemberRepository.flush();
 
 		warningService.removeCategoriesOnTeamDelete(teamId, now);
+		// 관리자 권한으로 삭제했으면 같은 트랜잭션에 기록한다. Mongo 앞에 둬서 DB 실패가 글 연결 해제를 남기지 않게 한다
+		if (asAdmin) {
+			recordAdminAction(actorId, AdminActionType.DELETE_TEAM, TARGET_TYPE_TEAM, teamId, now);
+		}
 		// 마지막 단계: Mongo가 실패하면 앞선 MariaDB 변경도 롤백된다
 		postLinkService.unlinkTeam(teamId);
 		if (asAdmin) {
 			access.logAdminUse("팀 삭제", actorId, teamId, null);
 		}
+	}
+
+	// 되돌릴 수 없는 관리자 행동 기록 (기능명세서 9장, DB명세서 1-16). 사유는 받지 않는다
+	private void recordAdminAction(long adminId, AdminActionType action, String targetType, long targetId,
+			LocalDateTime now) {
+		actionLogRepository.save(AdminActionLog.of(adminId, action, targetType, Long.toString(targetId), null, now));
 	}
 
 	private LocalDateTime now() {
