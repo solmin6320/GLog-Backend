@@ -421,6 +421,20 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 		assertTeamAUntouched();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = {"teamMembers", "teamInviteCode", "sentTeamInvitations", "inviteToTeam",
+			"cancelTeamInvitation", "kickTeamMember", "deleteTeam"})
+	void 역할이_관리자여도_승인_대기나_거절_계정은_팀_기능을_쓸_수_없다(String operation) {
+		members.setStatus(admin, MemberStatus.PENDING);
+		assertGraphQlError(run(admin, operation, teamA.id(), mate), ErrorCode.ACCOUNT_PENDING);
+
+		members.setStatus(admin, MemberStatus.REJECTED);
+		assertGraphQlError(run(admin, operation, teamA.id(), mate), ErrorCode.ACCOUNT_REJECTED);
+
+		assertTeamAUntouched();
+		assertThat(logs.list).isEmpty();
+	}
+
 	// ----- 서버 로그 -----
 
 	@Test
