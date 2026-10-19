@@ -129,11 +129,17 @@ class TeamBoardAccessIntegrationTest extends TeamBoardTestBase {
 		board.path("members").forEach(row -> assertThat(row.path("isMe").asBoolean()).isFalse());
 	}
 
-	// team 조회는 응답의 joinedAt 때문에 관리자 허용을 보류했다 (TM-01 ⑧ 이번 주 요약도 team 아래에 있다)
+	// TM-01 ⑧ 이번 주 요약은 team 아래에 있어서, team이 열린 관리자에게도 팀원과 같은 값이 나간다
 	@Test
-	void team_조회로는_관리자도_소속이_아니면_이번_주_요약을_받지_못한다() {
-		assertDenied(graphQl.post(bearerFor(admin()), TEAM_SUMMARY_QUERY, Map.of("id", Long.toString(publicTeam.id()))),
-				ErrorCode.FORBIDDEN);
+	void 관리자는_소속이_아니어도_team_조회로_이번_주_요약을_받는다() {
+		Map<String, Object> id = Map.of("id", Long.toString(publicTeam.id()));
+
+		GraphQlResponse byAdmin = graphQl.post(bearerFor(admin()), TEAM_SUMMARY_QUERY, id);
+		GraphQlResponse byMate = graphQl.post(bearerFor(mate), TEAM_SUMMARY_QUERY, id);
+
+		assertThat(byAdmin.hasErrors()).as(byAdmin.rawBody()).isFalse();
+		assertThat(byAdmin.data().path("team").path("weekSummary").isObject()).isTrue();
+		assertThat(byAdmin.data().path("team").path("weekSummary")).isEqualTo(byMate.data().path("team").path("weekSummary"));
 	}
 
 	@Test

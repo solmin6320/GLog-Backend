@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.team.dto.SentInvitationResponse;
@@ -157,10 +158,21 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 		assertGraphQlError(run(outsider, operation), ErrorCode.FORBIDDEN);
 	}
 
-	// team은 응답의 joinedAt이 "내가 참가한 시각"이라 비소속 관리자에게 줄 값이 정해질 때까지 관리자도 소속이어야 한다
+	// 팀원이 아닌 시스템 관리자는 team을 보고, "내가 참가한 시각"인 joinedAt만 null이다
 	@Test
-	void team_조회는_관리자도_소속이_아니면_볼_수_없다() {
-		assertGraphQlError(run(admin, "team"), ErrorCode.FORBIDDEN);
+	void 관리자는_소속이_아니어도_team을_보고_참가_시각만_null이다() {
+		GraphQlResponse response = run(admin, "team");
+
+		assertGraphQlOk(response);
+		JsonNode info = response.data().path("team");
+		assertThat(info.path("id").asText()).isEqualTo(Long.toString(team.id()));
+		assertThat(info.path("name").asText()).isEqualTo("접근 팀");
+		assertThat(info.path("isPublic").asBoolean()).isTrue();
+		assertThat(info.path("isLeader").asBoolean()).isFalse();
+		assertThat(info.path("memberCount").asInt()).isEqualTo(2);
+		assertThat(info.path("leader").path("id").asText()).isEqualTo(Long.toString(leader));
+		assertThat(info.path("createdAt").asText()).isNotBlank();
+		assertThat(info.path("joinedAt").isNull()).isTrue();
 	}
 
 	@ParameterizedTest
@@ -170,13 +182,15 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 	}
 
 	@Test
-	void 비공개_팀의_team_조회는_비소속_회원과_관리자에게는_차단된다() {
+	void 비공개_팀의_team_조회는_비소속_회원에게는_차단되고_관리자에게는_열린다() {
 		String id = Long.toString(privateTeam.id());
 
 		assertGraphQlError(gql(outsider, TeamGql.TEAM, Map.of("id", id)), ErrorCode.FORBIDDEN);
-		assertGraphQlError(gql(admin, TeamGql.TEAM, Map.of("id", id)), ErrorCode.FORBIDDEN);
 		assertGraphQlError(gql(teammate, TeamGql.TEAM, Map.of("id", id)), ErrorCode.FORBIDDEN);
 		assertGraphQlOk(gql(leader, TeamGql.TEAM, Map.of("id", id)));
+		GraphQlResponse byAdmin = gql(admin, TeamGql.TEAM, Map.of("id", id));
+		assertGraphQlOk(byAdmin);
+		assertThat(byAdmin.data().path("team").path("name").asText()).isEqualTo("비공개 접근 팀");
 	}
 
 	@Test
@@ -229,14 +243,14 @@ class TeamAccessControlIntegrationTest extends TeamIntegrationTest {
 		assertThat(invitationRows(team.id(), invitee)).extracting(r -> r.get("status")).containsExactly("PENDING");
 	}
 
-	// updateTeam·transferTeamLeadership은 응답의 Team.joinedAt 때문에 관리자 허용을 보류했다
-	@ParameterizedTest
-	@ValueSource(strings = {"updateTeam", "transferTeamLeadership"})
-	void 공개_설정_변경과_팀장_위임은_관리자도_팀장이_아니면_할_수_없다(String operation) {
-		assertGraphQlError(run(admin, operation), ErrorCode.FORBIDDEN);
+	@Test
+	void 관리자는_소속이_아니어도_공개_설정을_바꾸고_팀장을_위임한다() {
+		assertGraphQlOk(run(admin, "updateTeam"));
+		assertThat(teamRow(team.id()).get("is_public")).isIn(false, 0);
 
-		assertThat(((Number) teamRow(team.id()).get("leader_id")).longValue()).isEqualTo(leader);
-		assertThat(teamRow(team.id()).get("is_public")).isIn(true, 1);
+		assertGraphQlOk(run(admin, "transferTeamLeadership"));
+		assertThat(((Number) teamRow(team.id()).get("leader_id")).longValue()).isEqualTo(teammate);
+		assertThat(isActiveMember(team.id(), admin)).isFalse();
 	}
 
 	@Test

@@ -3,17 +3,23 @@ package com.jandilog.team;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jandilog.common.exception.ErrorCode;
@@ -35,16 +41,22 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 // 팀 권한 모델: 팀장은 자기 팀에서만, 시스템 관리자는 모든 팀에서 팀장 전용 기능과 팀 조회를 쓴다
-// (추방·아이디 초대·초대 철회·삭제 / 팀원 목록·초대코드·보낸 초대). 참가·탈퇴·글 권한에는 관리자 예외가 없다
+// (추방·아이디 초대·초대 철회·삭제·공개 설정·위임 / 팀 정보·팀원 목록·초대코드·보낸 초대). 참가·탈퇴·글 권한에는 관리자 예외가 없다.
+// 관리자 권한으로 한 추방·팀 삭제는 admin_action_log에 남고(팀장이 직접 한 것은 남지 않는다), 나머지는 서버 로그만 남는다
 class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 
 	private static final LocalDate WEEK_1 = LocalDate.of(2026, 9, 7);
 	private static final LocalDate WEEK_2 = LocalDate.of(2026, 9, 14);
 	private static final long MISSING_ID = 987_654_321L;
 
-	// 관리자가 쓸 수 있는 팀 기능 일곱 개
-	private static final String[] ADMIN_OPERATIONS = {"teamMembers", "teamInviteCode", "sentTeamInvitations",
-			"inviteToTeam", "cancelTeamInvitation", "kickTeamMember", "deleteTeam"};
+	@Autowired
+	private PlatformTransactionManager txManager;
+
+	// 관리자가 쓸 수 있는 팀 기능 열 개
+	static Stream<String> adminOperations() {
+		return Stream.of("team", "teamMembers", "teamInviteCode", "sentTeamInvitations", "updateTeam", "inviteToTeam",
+				"cancelTeamInvitation", "kickTeamMember", "transferTeamLeadership", "deleteTeam");
+	}
 
 	private record Call(String query, Map<String, Object> variables) {
 	}
@@ -91,14 +103,18 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 	private Call call(String operation, long teamId, long target) {
 		String id = Long.toString(teamId);
 		return switch (operation) {
+			case "team" -> new Call(TeamGql.TEAM, Map.of("id", id));
 			case "teamMembers" -> new Call(TeamGql.TEAM_MEMBERS, Map.of("id", id));
 			case "teamInviteCode" -> new Call(TeamGql.INVITE_CODE, Map.of("id", id));
 			case "sentTeamInvitations" -> new Call(TeamGql.SENT, Map.of("id", id));
+			case "updateTeam" -> new Call(TeamGql.UPDATE, Map.of("id", id, "input", Map.of("isPublic", false)));
 			case "inviteToTeam" -> new Call(TeamGql.INVITE, Map.of("id", id, "login", loginOf(invitee)));
 			// 철회는 팀 id를 받지 않아서, 팀 A면 실제 초대를 없는 팀이면 없는 초대를 가리킨다
 			case "cancelTeamInvitation" ->
 					new Call(TeamGql.CANCEL, Map.of("id", Long.toString(teamId == teamA.id() ? invitationId : MISSING_ID)));
 			case "kickTeamMember" -> new Call(TeamGql.KICK, Map.of("teamId", id, "memberId", Long.toString(target)));
+			case "transferTeamLeadership" ->
+					new Call(TeamGql.TRANSFER, Map.of("teamId", id, "newLeaderId", Long.toString(target)));
 			case "deleteTeam" -> new Call(TeamGql.DELETE, Map.of("teamId", id));
 			default -> throw new IllegalArgumentException(operation);
 		};
@@ -113,6 +129,7 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 	private void assertTeamAUntouched() {
 		assertThat(teamRow(teamA.id()).get("deleted_at")).isNull();
 		assertThat(((Number) teamRow(teamA.id()).get("leader_id")).longValue()).isEqualTo(leader);
+		assertThat(teamRow(teamA.id()).get("is_public")).isIn(true, 1);
 		assertThat(isActiveMember(teamA.id(), mate)).isTrue();
 		assertThat(activeMemberCount(teamA.id())).isEqualTo(2);
 		assertThat(redis.hasKey(banKey(teamA.id(), mate))).isFalse();
@@ -121,6 +138,7 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 
 	private void assertTeamBUntouched() {
 		assertThat(teamRow(teamB.id()).get("deleted_at")).isNull();
+		assertThat(teamRow(teamB.id()).get("is_public")).isIn(false, 0);
 		assertThat(isActiveMember(teamB.id(), otherMate)).isTrue();
 		assertThat(activeMemberCount(teamB.id())).isEqualTo(2);
 		assertThat(redis.hasKey(banKey(teamB.id(), otherMate))).isFalse();
@@ -139,11 +157,10 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = {"teamMembers", "teamInviteCode", "sentTeamInvitations", "inviteToTeam",
-			"cancelTeamInvitation", "kickTeamMember", "deleteTeam"})
+	@MethodSource("adminOperations")
 	void 팀원_다른_팀_팀장_비소속_일반_회원은_관리자_전용_범위의_기능을_쓸_수_없다(String operation) {
-		// 팀원: 팀장 전용 기능 전부와 (팀원이어도) 비팀장이라 막힌다. 팀원 목록은 팀원이면 되므로 따로 확인한다
-		if (!operation.equals("teamMembers")) {
+		// 팀원: 팀장 전용 기능 전부와 (팀원이어도) 비팀장이라 막힌다. 팀 정보·팀원 목록은 팀원이면 되므로 따로 확인한다
+		if (!operation.equals("teamMembers") && !operation.equals("team")) {
 			assertGraphQlError(run(mate, operation, teamA.id(), mate), ErrorCode.FORBIDDEN);
 		}
 		assertGraphQlError(run(otherLeader, operation, teamA.id(), mate), ErrorCode.FORBIDDEN);
@@ -376,16 +393,14 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 	// ----- 없는 팀·삭제된 팀 -----
 
 	@ParameterizedTest
-	@ValueSource(strings = {"teamMembers", "teamInviteCode", "sentTeamInvitations", "inviteToTeam", "cancelTeamInvitation",
-			"kickTeamMember", "deleteTeam"})
+	@MethodSource("adminOperations")
 	void 없는_팀은_관리자에게도_없는_팀이다(String operation) {
 		assertGraphQlError(run(admin, operation, MISSING_ID, mate), ErrorCode.NOT_FOUND);
 		assertThat(logs.list).isEmpty();
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = {"teamMembers", "teamInviteCode", "sentTeamInvitations", "inviteToTeam", "cancelTeamInvitation",
-			"kickTeamMember", "deleteTeam"})
+	@MethodSource("adminOperations")
 	void 삭제된_팀은_관리자에게도_없는_팀이다(String operation) {
 		leaveService.delete(leader, teamA.id());
 
@@ -422,8 +437,7 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = {"teamMembers", "teamInviteCode", "sentTeamInvitations", "inviteToTeam",
-			"cancelTeamInvitation", "kickTeamMember", "deleteTeam"})
+	@MethodSource("adminOperations")
 	void 역할이_관리자여도_승인_대기나_거절_계정은_팀_기능을_쓸_수_없다(String operation) {
 		members.setStatus(admin, MemberStatus.PENDING);
 		assertGraphQlError(run(admin, operation, teamA.id(), mate), ErrorCode.ACCOUNT_PENDING);
@@ -468,5 +482,237 @@ class TeamAdminAccessIntegrationTest extends TeamIntegrationTest {
 
 		assertThat(logs.list).isEmpty();
 		assertThat(isActiveMember(own.id(), ownMate)).isFalse();
+	}
+
+	// ----- team·공개 설정·위임 -----
+
+	@Test
+	void 관리자는_소속이_아닌_팀의_기본_정보를_보고_참가_시각만_null이다() {
+		for (CreatedTeam team : List.of(teamA, teamB)) {
+			GraphQlResponse response = run(admin, "team", team.id(), mate);
+
+			assertGraphQlOk(response);
+			JsonNode info = response.data().path("team");
+			assertThat(info.path("id").asText()).isEqualTo(Long.toString(team.id()));
+			assertThat(info.path("isLeader").asBoolean()).isFalse();
+			assertThat(info.path("memberCount").asInt()).isEqualTo(2);
+			assertThat(info.path("leader").path("githubLogin").asText()).isNotBlank();
+			assertThat(info.path("createdAt").asText()).isNotBlank();
+			assertThat(info.path("joinedAt").isNull()).isTrue();
+		}
+		// 비공개 팀도 실제 이름이다
+		assertThat(run(admin, "team", teamB.id(), mate).data().path("team").path("name").asText())
+				.isEqualTo("관리자 확인 팀 B");
+		// 읽기라 서버 로그도 DB 기록도 남지 않는다
+		assertThat(logs.list).isEmpty();
+		assertThat(adminLogs(admin)).isEmpty();
+	}
+
+	@Test
+	void 팀원인_관리자의_team과_공개_설정_응답은_실제_참가_시각을_준다() {
+		joinService.joinByCode(admin, teamA.inviteCode());
+
+		JsonNode info = run(admin, "team", teamA.id(), mate).data().path("team");
+		JsonNode updated = run(admin, "updateTeam", teamA.id(), mate).data().path("updateTeam");
+
+		assertThat(info.path("isLeader").asBoolean()).isFalse();
+		assertThat(info.path("joinedAt").asText()).isNotBlank();
+		assertThat(updated.path("isLeader").asBoolean()).isFalse();
+		assertThat(updated.path("joinedAt").asText()).isEqualTo(info.path("joinedAt").asText());
+		assertThat(updated.path("isPublic").asBoolean()).isFalse();
+	}
+
+	@Test
+	void 관리자가_공개_설정을_바꾸면_반영되고_응답은_비소속_관리자_기준이며_서버_로그만_남는다() {
+		GraphQlResponse hide = run(admin, "updateTeam", teamA.id(), mate);
+
+		assertGraphQlOk(hide);
+		JsonNode updated = hide.data().path("updateTeam");
+		assertThat(updated.path("isPublic").asBoolean()).isFalse();
+		assertThat(updated.path("isLeader").asBoolean()).isFalse();
+		assertThat(updated.path("memberCount").asInt()).isEqualTo(2);
+		assertThat(updated.path("joinedAt").isNull()).isTrue();
+		assertThat(teamRow(teamA.id()).get("is_public")).isIn(false, 0);
+
+		GraphQlResponse show = gql(admin, TeamGql.UPDATE,
+				Map.of("id", Long.toString(teamA.id()), "input", Map.of("isPublic", true)));
+		assertGraphQlOk(show);
+		assertThat(teamRow(teamA.id()).get("is_public")).isIn(true, 1);
+
+		assertThat(logs.list).hasSize(2);
+		assertThat(logs.list.get(0).getFormattedMessage()).contains("action=공개 설정 변경", "adminId=" + admin,
+				"teamId=" + teamA.id());
+		assertThat(adminLogs(admin)).isEmpty();
+		assertThat(isActiveMember(teamA.id(), admin)).isFalse();
+	}
+
+	@Test
+	void 관리자가_팀장을_위임하면_새_팀장은_현재_팀원이어야_하고_일반_위임과_같은_규칙이다() {
+		assertGraphQlError(run(admin, "transferTeamLeadership", teamA.id(), leader), ErrorCode.INVALID_INPUT);
+		assertGraphQlError(run(admin, "transferTeamLeadership", teamA.id(), outsider), ErrorCode.TEAM_MEMBER_NOT_FOUND);
+		assertTeamAUntouched();
+		assertThat(logs.list).isEmpty();
+
+		GraphQlResponse response = run(admin, "transferTeamLeadership", teamA.id(), mate);
+
+		assertGraphQlOk(response);
+		JsonNode moved = response.data().path("transferTeamLeadership");
+		assertThat(moved.path("leader").path("id").asText()).isEqualTo(Long.toString(mate));
+		assertThat(moved.path("isLeader").asBoolean()).isFalse();
+		assertThat(moved.path("joinedAt").isNull()).isTrue();
+		assertThat(((Number) teamRow(teamA.id()).get("leader_id")).longValue()).isEqualTo(mate);
+		// 이전 팀장은 일반 팀원이 되고, 되돌릴 수 없다
+		assertThat(isActiveMember(teamA.id(), leader)).isTrue();
+		assertGraphQlError(run(leader, "teamInviteCode", teamA.id(), mate), ErrorCode.FORBIDDEN);
+		assertGraphQlOk(run(mate, "teamInviteCode", teamA.id(), mate));
+
+		assertThat(logs.list).hasSize(1);
+		assertThat(logs.list.get(0).getFormattedMessage()).contains("action=팀장 위임", "adminId=" + admin,
+				"teamId=" + teamA.id(), "targetId=" + mate);
+		// 위임은 admin_action_log 대상이 아니다
+		assertThat(adminLogs(admin)).isEmpty();
+	}
+
+	@Test
+	void 관리자가_자기가_팀장인_팀의_공개_설정과_위임은_팀장으로서의_사용이라_로그가_없고_응답은_실제_값이다() {
+		CreatedTeam own = newTeam(admin, "관리자 본인 팀", null, true);
+		long ownMate = joinedMember(own);
+
+		JsonNode updated = run(admin, "updateTeam", own.id(), ownMate).data().path("updateTeam");
+		JsonNode moved = run(admin, "transferTeamLeadership", own.id(), ownMate).data().path("transferTeamLeadership");
+
+		assertThat(updated.path("isLeader").asBoolean()).isTrue();
+		assertThat(updated.path("joinedAt").asText()).isNotBlank();
+		assertThat(moved.path("isLeader").asBoolean()).isFalse();
+		assertThat(moved.path("joinedAt").asText()).isNotBlank();
+		assertThat(logs.list).isEmpty();
+	}
+
+	// ----- admin_action_log: 관리자 권한의 추방·팀 삭제 -----
+
+	private List<Map<String, Object>> adminLogs(long adminId) {
+		return jdbc.queryForList("select * from admin_action_log where admin_id = ? order by id", adminId);
+	}
+
+	// 대상으로 본 KICK_MEMBER·DELETE_TEAM 기록 (누가 했든)
+	private List<Map<String, Object>> teamActionLogs(String targetType, long targetId) {
+		return jdbc.queryForList("select * from admin_action_log where action in ('KICK_MEMBER', 'DELETE_TEAM') "
+				+ "and target_type = ? and target_id = ?", targetType, Long.toString(targetId));
+	}
+
+	private long membershipId(long teamId, long memberId) {
+		return ((Number) membershipRows(teamId, memberId).get(0).get("id")).longValue();
+	}
+
+	@Test
+	void 관리자가_추방하면_KICK_MEMBER가_끝난_소속_행을_대상으로_추방_시각과_함께_기록된다() {
+		clock.fixAt(Instant.parse("2026-09-10T03:00:15Z"));
+
+		assertGraphQlOk(run(admin, "kickTeamMember", teamA.id(), mate));
+
+		List<Map<String, Object>> rows = adminLogs(admin);
+		assertThat(rows).hasSize(1);
+		Map<String, Object> row = rows.get(0);
+		assertThat(row.get("action")).isEqualTo("KICK_MEMBER");
+		assertThat(row.get("target_type")).isEqualTo("TEAM_MEMBER");
+		assertThat(row.get("target_id")).isEqualTo(Long.toString(membershipId(teamA.id(), mate)));
+		assertThat(row.get("reason")).isNull();
+		assertThat(time(row.get("created_at"))).isEqualTo(LocalDateTime.of(2026, 9, 10, 12, 0, 15));
+		// 기록의 대상 행이 실제로 이 추방이다
+		assertThat(membershipRows(teamA.id(), mate).get(0).get("leave_type")).isEqualTo("KICKED");
+		assertThat(time(membershipRows(teamA.id(), mate).get(0).get("left_at"))).isEqualTo(time(row.get("created_at")));
+	}
+
+	@Test
+	void 관리자가_팀을_삭제하면_DELETE_TEAM이_팀을_대상으로_기록되고_같은_팀을_다시_지우면_기록이_늘지_않는다() {
+		assertGraphQlOk(run(admin, "deleteTeam", teamA.id(), mate));
+		assertGraphQlError(run(admin, "deleteTeam", teamA.id(), mate), ErrorCode.NOT_FOUND);
+
+		List<Map<String, Object>> rows = adminLogs(admin);
+		assertThat(rows).hasSize(1);
+		assertThat(rows.get(0).get("action")).isEqualTo("DELETE_TEAM");
+		assertThat(rows.get(0).get("target_type")).isEqualTo("TEAM");
+		assertThat(rows.get(0).get("target_id")).isEqualTo(Long.toString(teamA.id()));
+		assertThat(rows.get(0).get("reason")).isNull();
+		assertThat(rows.get(0).get("created_at")).isNotNull();
+	}
+
+	@Test
+	void 팀장이_직접_추방하고_삭제한_것은_기록하지_않는다() {
+		assertGraphQlOk(run(leader, "kickTeamMember", teamA.id(), mate));
+		assertGraphQlOk(run(otherLeader, "deleteTeam", teamB.id(), otherMate));
+
+		assertThat(teamActionLogs("TEAM_MEMBER", membershipId(teamA.id(), mate))).isEmpty();
+		assertThat(teamActionLogs("TEAM", teamB.id())).isEmpty();
+		assertThat(adminLogs(leader)).isEmpty();
+		assertThat(adminLogs(otherLeader)).isEmpty();
+	}
+
+	@Test
+	void 관리자가_자기가_팀장인_팀에서_추방하고_삭제한_것도_팀장으로서의_사용이라_기록하지_않는다() {
+		CreatedTeam own = newTeam(admin, "관리자 본인 팀", null, true);
+		long ownMate = joinedMember(own);
+
+		assertGraphQlOk(run(admin, "kickTeamMember", own.id(), ownMate));
+		assertGraphQlOk(run(admin, "deleteTeam", own.id(), ownMate));
+
+		assertThat(adminLogs(admin)).isEmpty();
+		assertThat(logs.list).isEmpty();
+	}
+
+	@Test
+	void 거절된_관리자_호출은_기록을_남기지_않는다() {
+		// 팀장 추방(INVALID_INPUT), 팀원이 아닌 대상(TEAM_MEMBER_NOT_FOUND), 없는 팀(NOT_FOUND)
+		assertGraphQlError(run(admin, "kickTeamMember", teamA.id(), leader), ErrorCode.INVALID_INPUT);
+		assertGraphQlError(run(admin, "kickTeamMember", teamA.id(), outsider), ErrorCode.TEAM_MEMBER_NOT_FOUND);
+		assertGraphQlError(run(admin, "kickTeamMember", MISSING_ID, mate), ErrorCode.NOT_FOUND);
+		assertGraphQlError(run(admin, "deleteTeam", MISSING_ID, mate), ErrorCode.NOT_FOUND);
+		// 일반 팀원·다른 팀 팀장의 시도
+		assertGraphQlError(run(mate, "kickTeamMember", teamA.id(), mate), ErrorCode.FORBIDDEN);
+		assertGraphQlError(run(otherLeader, "deleteTeam", teamA.id(), mate), ErrorCode.FORBIDDEN);
+
+		assertThat(adminLogs(admin)).isEmpty();
+		assertThat(teamActionLogs("TEAM", teamA.id())).isEmpty();
+		assertThat(teamActionLogs("TEAM_MEMBER", membershipId(teamA.id(), mate))).isEmpty();
+		assertTeamAUntouched();
+	}
+
+	@Test
+	void 추방과_팀_삭제가_아닌_관리자_사용은_admin_action_log에_남기지_않는다() {
+		assertGraphQlOk(run(admin, "team", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "teamMembers", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "teamInviteCode", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "sentTeamInvitations", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "updateTeam", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "cancelTeamInvitation", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "inviteToTeam", teamA.id(), mate));
+		assertGraphQlOk(run(admin, "transferTeamLeadership", teamA.id(), mate));
+
+		assertThat(adminLogs(admin)).isEmpty();
+	}
+
+	@Test
+	void 관리자_추방이_들어_있던_트랜잭션이_롤백되면_기록과_추방과_차단_키가_모두_사라진다() {
+		new TransactionTemplate(txManager).executeWithoutResult(status -> {
+			leaveService.kick(admin, teamA.id(), mate);
+			status.setRollbackOnly();
+		});
+
+		assertThat(adminLogs(admin)).isEmpty();
+		assertThat(isActiveMember(teamA.id(), mate)).isTrue();
+		assertThat(redis.hasKey(banKey(teamA.id(), mate))).isFalse();
+		assertTeamAUntouched();
+	}
+
+	@Test
+	void 관리자_팀_삭제가_들어_있던_트랜잭션이_롤백되면_기록과_삭제가_모두_사라진다() {
+		new TransactionTemplate(txManager).executeWithoutResult(status -> {
+			leaveService.delete(admin, teamA.id());
+			status.setRollbackOnly();
+		});
+
+		assertThat(adminLogs(admin)).isEmpty();
+		assertThat(teamActionLogs("TEAM", teamA.id())).isEmpty();
+		assertTeamAUntouched();
 	}
 }
