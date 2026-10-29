@@ -68,6 +68,8 @@ spring:
 
 # OAuth 인증 요청을 잇는 동안에만 세션을 쓴다. 그 뒤 세션은 버린다
 server:
+  # .env의 SERVER_PORT로 포트를 바꾼다 (다른 프로그램이 8080을 쓸 때). 바꾸면 BACKEND_BASE_URL도 같이 맞춘다
+  port: ${SERVER_PORT:8080}
   servlet:
     session:
       timeout: 10m
