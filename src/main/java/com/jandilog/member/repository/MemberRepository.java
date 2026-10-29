@@ -53,6 +53,12 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 	int approve(@Param("id") long id, @Param("from") MemberStatus from, @Param("to") MemberStatus to,
 			@Param("approvedAt") LocalDateTime approvedAt);
 
+	// 상태가 status이고 역할이 from일 때만 역할을 바꾼다. 관리자 둘이 동시에 지정해도 한 번만 적용된다
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("update Member m set m.role = :to where m.id = :id and m.status = :status and m.role = :from")
+	int changeRole(@Param("id") long id, @Param("status") MemberStatus status, @Param("from") MemberRole from,
+			@Param("to") MemberRole to);
+
 // 잠금 읽기(현재 읽기)라 트랜잭션 시작 시점의 스냅샷이 아니라 최신 커밋 값을 읽는다
 @Lock(LockModeType.PESSIMISTIC_READ)
 @Query("select m from Member m where m.id = :id")

@@ -13,7 +13,7 @@ import com.jandilog.member.dto.AdminMemberResponse;
 import com.jandilog.member.dto.ApprovalStatusFilter;
 import com.jandilog.member.service.MemberApprovalService;
 
-// 가입 승인 탭(관리자 전용)
+// 가입 승인 탭과 관리자 지정(관리자 전용)
 @Controller
 public class MemberApprovalController {
 
@@ -47,6 +47,13 @@ public class MemberApprovalController {
 	@PreAuthorize("hasRole('ADMIN')")
 	public AdminMemberResponse revertMemberToPending(@Argument String memberId) {
 		return approvalService.revertToPending(memberId);
+	}
+
+	@MutationMapping
+	@PreAuthorize("hasRole('ADMIN')")
+	public AdminMemberResponse promoteMemberToAdmin(@AuthenticationPrincipal AuthenticatedMember admin,
+			@Argument String memberId) {
+		return approvalService.promoteToAdmin(admin.id(), memberId);
 	}
 
 }

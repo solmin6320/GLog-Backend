@@ -1,6 +1,6 @@
 package com.jandilog.admin.domain;
 
-// admin_action_log.action ENUM과 1:1 (DB명세서 1-16, 앞 여섯 개는 V2, KICK_MEMBER·DELETE_TEAM은 V4)
+// admin_action_log.action ENUM과 1:1 (DB명세서 1-16, 앞 여섯 개는 V2, KICK_MEMBER·DELETE_TEAM은 V4, PROMOTE_ADMIN은 V5)
 public enum AdminActionType {
 	REJECT_MEMBER,
 	DELETE_POST,
@@ -9,5 +9,6 @@ public enum AdminActionType {
 	CORRECT_JUDGMENT,
 	RESTORE_WARNING,
 	KICK_MEMBER,
-	DELETE_TEAM
+	DELETE_TEAM,
+	PROMOTE_ADMIN
 }
