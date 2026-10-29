@@ -17,13 +17,14 @@ import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.pagination.CursorCodec;
 import com.jandilog.common.pagination.PageSlice;
 import com.jandilog.member.domain.Member;
+import com.jandilog.member.domain.MemberRole;
 import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.member.dto.AdminMemberPage;
 import com.jandilog.member.dto.AdminMemberResponse;
 import com.jandilog.member.dto.ApprovalStatusFilter;
 import com.jandilog.member.repository.MemberRepository;
 
-// 가입 승인 탭: 목록, 승인, 거절, 거절 회원을 승인 대기로 되돌리기 (기능명세서 1·9장)
+// 가입 승인 탭: 목록, 승인, 거절, 거절 회원을 승인 대기로 되돌리기 (기능명세서 1·9장)와 관리자 지정
 @Service
 public class MemberApprovalService {
 
@@ -86,6 +87,18 @@ public class MemberApprovalService {
 		long id = parseId(memberId);
 		int updated = memberRepository.changeStatus(id, MemberStatus.REJECTED, MemberStatus.PENDING);
 		return afterTransition(id, updated);
+	}
+
+	// 관리자 지정: 활성 일반 회원만 관리자로 올린다(2026-10-29 사용자 지시, 현재 관리자의 승인).
+	// 승인 대기·거절 회원과 이미 관리자인 회원은 CONFLICT. 되돌릴 수 없는 행동이라 admin_action_log에 남긴다
+	@Transactional
+	public AdminMemberResponse promoteToAdmin(long adminId, String memberId) {
+		long id = parseId(memberId);
+		int updated = memberRepository.changeRole(id, MemberStatus.ACTIVE, MemberRole.MEMBER, MemberRole.ADMIN);
+		AdminMemberResponse result = afterTransition(id, updated);
+		actionLogRepository.save(AdminActionLog.of(adminId, AdminActionType.PROMOTE_ADMIN, TARGET_TYPE_MEMBER,
+				Long.toString(id), null, LocalDateTime.now(clock)));
+		return result;
 	}
 
 	// 갱신 0건이면 없는 회원(404)과 이미 다른 상태(409)를 구분한다

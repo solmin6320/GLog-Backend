@@ -39,6 +39,7 @@ class AccountAccessIntegrationTest extends AuthIntegrationTest {
 	private static final String APPROVE = "mutation($id: ID!) { approveMember(memberId: $id) { id status } }";
 	private static final String REJECT = "mutation($id: ID!) { rejectMember(memberId: $id) { id status } }";
 	private static final String REVERT = "mutation($id: ID!) { revertMemberToPending(memberId: $id) { id status } }";
+	private static final String PROMOTE = "mutation($id: ID!) { promoteMemberToAdmin(memberId: $id) { id role } }";
 
 	private byte[] secret;
 	private long pendingId;
@@ -187,6 +188,12 @@ class AccountAccessIntegrationTest extends AuthIntegrationTest {
 	@Test
 	void 관리자가_아닌_계정은_거절_회원을_되돌릴_수_없다() {
 		assertAdminMutationDenied(REVERT, rejectedId);
+	}
+
+	@Test
+	void 관리자가_아닌_계정은_관리자를_지정할_수_없고_역할도_그대로다() {
+		assertAdminMutationDenied(PROMOTE, memberId);
+		assertThat(members.find(memberId).orElseThrow().role()).isEqualTo(MemberRole.MEMBER);
 	}
 
 	private void assertAdminMutationDenied(String mutation, long target) {
