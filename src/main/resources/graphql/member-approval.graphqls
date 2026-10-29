@@ -1,4 +1,4 @@
-# 가입 승인 (기능명세서 1·9장, 관리자 전용)
+# 가입 승인 (기능명세서 1·9장)과 관리자 지정 (2026-10-29 사용자 지시), 관리자 전용
 
 extend type Query {
     "가입 승인 탭 목록. 오래된 신청부터 커서 기반 20개"
@@ -19,6 +19,8 @@ extend type Mutation {
     rejectMember(memberId: ID!): AdminMember!
     "거절된 회원을 승인 대기로 되돌린다"
     revertMemberToPending(memberId: ID!): AdminMember!
+    "활성 일반 회원을 관리자로 지정한다. 승인 대기·거절 회원과 이미 관리자인 회원은 CONFLICT. 관리자 행동 로그가 남는다"
+    promoteMemberToAdmin(memberId: ID!): AdminMember!
 }
 
 enum MemberApprovalFilter {
@@ -32,6 +34,7 @@ type AdminMember {
     githubLogin: String!
     nickname: String!
     status: MemberStatus!
+    role: MemberRole!
     "신청 시각 (KST, ISO-8601)"
     createdAt: String!
 }

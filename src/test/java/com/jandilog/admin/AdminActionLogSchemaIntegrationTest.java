@@ -12,11 +12,11 @@ import org.junit.jupiter.api.Test;
 import com.jandilog.admin.domain.AdminActionType;
 import com.jandilog.testsupport.auth.AuthIntegrationTest;
 
-// admin_action_log.action ENUM에 KICK_MEMBER·DELETE_TEAM을 끝에 붙인 V4 마이그레이션 확인 (DB명세서 1-16)
+// admin_action_log.action ENUM에 KICK_MEMBER·DELETE_TEAM(V4), PROMOTE_ADMIN(V5)을 끝에 붙인 마이그레이션 확인 (DB명세서 1-16)
 class AdminActionLogSchemaIntegrationTest extends AuthIntegrationTest {
 
 	private static final List<String> EXPECTED = List.of("REJECT_MEMBER", "DELETE_POST", "DELETE_COMMENT",
-			"FULFILL_PENALTY", "CORRECT_JUDGMENT", "RESTORE_WARNING", "KICK_MEMBER", "DELETE_TEAM");
+			"FULFILL_PENALTY", "CORRECT_JUDGMENT", "RESTORE_WARNING", "KICK_MEMBER", "DELETE_TEAM", "PROMOTE_ADMIN");
 
 	private String actionColumnType() {
 		return jdbc.queryForObject("select column_type from information_schema.columns "
@@ -25,7 +25,7 @@ class AdminActionLogSchemaIntegrationTest extends AuthIntegrationTest {
 	}
 
 	@Test
-	void action_컬럼은_기존_여섯_값의_이름과_순서를_지키고_끝에_두_값이_붙는다() {
+	void action_컬럼은_기존_여섯_값의_이름과_순서를_지키고_끝에_새_값들이_붙는다() {
 		String type = actionColumnType();
 
 		assertThat(type).isEqualTo("enum(" + String.join(",", EXPECTED.stream().map(v -> "'" + v + "'").toList()) + ")");
@@ -50,16 +50,16 @@ class AdminActionLogSchemaIntegrationTest extends AuthIntegrationTest {
 	}
 
 	@Test
-	void Flyway가_V1부터_V4까지_성공으로_적용했다() {
+	void Flyway가_V1부터_V5까지_성공으로_적용했다() {
 		List<Map<String, Object>> rows = jdbc.queryForList(
 				"select version, success from flyway_schema_history where version is not null order by installed_rank");
 
-		assertThat(rows).extracting(r -> r.get("version").toString()).contains("1", "2", "3", "4");
+		assertThat(rows).extracting(r -> r.get("version").toString()).contains("1", "2", "3", "4", "5");
 		assertThat(rows).allSatisfy(r -> assertThat(String.valueOf(r.get("success"))).isIn("true", "1"));
 	}
 
 	@Test
-	void 새_두_값으로_기록을_넣을_수_있고_기존_값도_그대로_들어간다() {
+	void 새_값으로_기록을_넣을_수_있고_기존_값도_그대로_들어간다() {
 		long admin = members.admin();
 
 		for (String action : EXPECTED) {
