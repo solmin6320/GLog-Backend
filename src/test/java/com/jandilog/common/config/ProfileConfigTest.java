@@ -135,6 +135,12 @@ class ProfileConfigTest {
 	// ----- 첫 관리자 지정(ADMIN_GITHUB_IDS) -----
 
 	@Test
+	void 로컬_설정은_실행_디렉터리의_env를_없어도_되는_파일로_읽는다() {
+		assertThat(environment(false, Map.of()).getProperty("spring.config.import"))
+				.isEqualTo("optional:file:.env[.properties]");
+	}
+
+	@Test
 	void ADMIN_GITHUB_IDS_기본값은_비어_있고_환경변수로_받는다() {
 		assertThat(environment(false, Map.of()).getProperty("jandilog.admin.github-ids")).isEmpty();
 		assertThat(environment(false, Map.of("ADMIN_GITHUB_IDS", "11,22")).getProperty("jandilog.admin.github-ids"))
