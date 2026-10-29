@@ -51,6 +51,11 @@ class AdminBootstrapIntegrationTest extends AuthIntegrationTest {
 	private static final LocalDateTime EARLIER = LocalDateTime.of(2026, 1, 2, 3, 4, 5);
 	private static final LocalDateTime APPROVED_EARLIER = LocalDateTime.of(2026, 1, 3, 4, 5, 6);
 	private static final String ADMIN_LIST = "{ adminMembers { totalCount } }";
+	private static final String EXCHANGE = """
+			mutation($code: String!) {
+			  exchangeAuthCode(code: $code) { accessToken me { id status role } }
+			}
+			""";
 
 	@Autowired
 	private OAuthLoginSuccessHandler successHandler;
@@ -379,6 +384,35 @@ class AdminBootstrapIntegrationTest extends AuthIntegrationTest {
 		GraphQlResponse allowed = graphQl.post(token, ADMIN_LIST);
 		assertThat(allowed.hasErrors()).as(allowed.rawBody()).isFalse();
 		assertThat(allowed.data().path("adminMembers").path("totalCount").isNumber()).isTrue();
+		GraphQlResponse me = graphQl.post(token, "{ me { status role } }");
+		assertThat(me.data().path("me").path("status").asText()).isEqualTo("ACTIVE");
+		assertThat(me.data().path("me").path("role").asText()).isEqualTo("ADMIN");
+	}
+
+	// 로그인 뒤 받은 코드를 교환해 새로 발급한 토큰과 응답의 me에도 활성 관리자가 반영된다
+	@ParameterizedTest
+	@CsvSource({"NONE, MEMBER", "PENDING, MEMBER", "REJECTED, MEMBER", "ACTIVE, MEMBER", "ACTIVE, ADMIN"})
+	void 로그인_뒤_코드를_교환한_새_토큰과_me에도_활성_관리자가_담긴다(String start, MemberRole role) {
+		if (!"NONE".equals(start)) {
+			MemberStatus status = MemberStatus.valueOf(start);
+			insertListed(status, role, status == MemberStatus.ACTIVE ? APPROVED_EARLIER : null);
+		}
+
+		LoginResult login = loginListed();
+		assertThat(login.error()).isNull();
+		// 토큰 만료는 실제 시각으로 검증되므로 고정한 시계를 되돌린 뒤 발급받는다
+		clock.reset();
+		GraphQlResponse exchanged = graphQl.post(null, EXCHANGE, Map.of("code", login.code()));
+
+		assertThat(exchanged.hasErrors()).as(exchanged.rawBody()).isFalse();
+		var payload = exchanged.data().path("exchangeAuthCode");
+		assertThat(payload.path("me").path("id").asText()).isEqualTo(Long.toString(listedRow().id()));
+		assertThat(payload.path("me").path("status").asText()).isEqualTo("ACTIVE");
+		assertThat(payload.path("me").path("role").asText()).isEqualTo("ADMIN");
+		String token = payload.path("accessToken").asText();
+		assertThat(token).isNotBlank();
+		GraphQlResponse allowed = graphQl.post(token, ADMIN_LIST);
+		assertThat(allowed.hasErrors()).as(allowed.rawBody()).isFalse();
 		GraphQlResponse me = graphQl.post(token, "{ me { status role } }");
 		assertThat(me.data().path("me").path("status").asText()).isEqualTo("ACTIVE");
 		assertThat(me.data().path("me").path("role").asText()).isEqualTo("ADMIN");
