@@ -199,15 +199,15 @@ class AdminBootstrapIntegrationTest extends AuthIntegrationTest {
 	// ----- 목록에 없는 계정은 기존 동작 그대로 -----
 
 	@Test
-	void 목록에_없는_새_회원은_승인_대기로_만들어진다() {
+	void 목록에_없는_새_회원은_일반_활성_회원으로_만들어진다() {
 		long githubId = members.nextGithubId();
 
 		LoginResult result = driver.login(githubId, "outsider", "외부인");
 
 		MemberRow row = members.findByGithubId(githubId).orElseThrow();
-		assertThat(row.status()).isEqualTo(MemberStatus.PENDING);
+		assertThat(row.status()).isEqualTo(MemberStatus.ACTIVE);
 		assertThat(row.role()).isEqualTo(MemberRole.MEMBER);
-		assertThat(row.approvedAt()).isNull();
+		assertThat(row.approvedAt()).isEqualTo(NOW_KST);
 		assertThat(result.code()).isNotNull();
 		assertThat(adminLogs()).isEmpty();
 	}
@@ -250,8 +250,7 @@ class AdminBootstrapIntegrationTest extends AuthIntegrationTest {
 			driver.login(githubId, "near-miss", "비슷한 id");
 
 			MemberRow row = members.findByGithubId(githubId).orElseThrow();
-			assertThat(row.status()).as("id=%d", githubId).isEqualTo(MemberStatus.PENDING);
-			assertThat(row.role()).isEqualTo(MemberRole.MEMBER);
+			assertThat(row.role()).as("id=%d", githubId).isEqualTo(MemberRole.MEMBER);
 		}
 	}
 
@@ -265,7 +264,6 @@ class AdminBootstrapIntegrationTest extends AuthIntegrationTest {
 
 		assertActiveAdmin(listedRow(), NOW_KST);
 		MemberRow row = members.findByGithubId(outsider).orElseThrow();
-		assertThat(row.status()).isEqualTo(MemberStatus.PENDING);
 		assertThat(row.role()).isEqualTo(MemberRole.MEMBER);
 	}
 

@@ -44,15 +44,15 @@ class AdminBootstrapEmptyListIntegrationTest extends AuthIntegrationTest {
 	}
 
 	@Test
-	void 새_회원은_누구든_승인_대기로_만들어진다() {
+	void 새_회원은_누구든_일반_활성_회원으로_만들어진다() {
 		long githubId = members.nextGithubId();
 
 		LoginResult result = driver.login(githubId, "first-user", "첫 사용자");
 
 		MemberRow row = members.findByGithubId(githubId).orElseThrow();
-		assertThat(row.status()).isEqualTo(MemberStatus.PENDING);
+		assertThat(row.status()).isEqualTo(MemberStatus.ACTIVE);
 		assertThat(row.role()).isEqualTo(MemberRole.MEMBER);
-		assertThat(row.approvedAt()).isNull();
+		assertThat(row.approvedAt()).isEqualTo(row.createdAt());
 		assertThat(result.code()).isNotNull();
 	}
 
