@@ -26,8 +26,8 @@ import com.jandilog.team.service.TeamJoinService;
 import com.jandilog.team.service.TeamLeaveService;
 import com.jandilog.team.service.TeamService;
 
-// 팀 (기능명세서 2장). 팀장 전용·팀원 전용 검사는 서비스가 팀을 읽어서 하고(관리자도 예외 없음),
-// 여기서는 ACTIVE 회원(ROLE_MEMBER)만 통과시킨다
+// 팀 (기능명세서 2장). 팀장 전용·팀원 전용 검사는 서비스가 팀을 읽어서 하고, 여기서는 ACTIVE 회원(ROLE_MEMBER)만 통과시킨다.
+// 시스템 관리자는 팀 정보·팀원 목록·초대코드·보낸 초대·공개 설정·초대·철회·추방·위임·삭제를 모든 팀에 쓸 수 있다 (TeamAccessService)
 @Controller
 public class TeamController {
 

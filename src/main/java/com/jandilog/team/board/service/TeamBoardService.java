@@ -69,11 +69,11 @@ public class TeamBoardService {
 		this.clock = clock;
 	}
 
-	// 그 팀의 현재 팀원·팀장만 (비소속·관리자 E-09), 없거나 삭제된 팀은 E-53
+	// 그 팀의 현재 팀원·팀장과 시스템 관리자만 (그 밖은 E-09), 없거나 삭제된 팀은 E-53
 	@Transactional(readOnly = true)
 	public TeamBoardResponse teamBoard(long viewerId, long teamId) {
 		Team team = access.requireAlive(teamId);
-		access.requireMembership(teamId, viewerId);
+		access.requireMemberOrAdmin(teamId, viewerId);
 		LocalDate weekStart = currentWeekStart();
 
 		List<BoardMemberRow> rows = leaderFirst(repository.findCurrentMembers(List.of(teamId)), team);

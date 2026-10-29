@@ -101,11 +101,13 @@ class TeamKickIntegrationTest extends TeamIntegrationTest {
 		long teammate = joinedMember(team);
 		long target = joinedMember(team);
 		long outsider = member();
-		long admin = adminMember();
+		long otherLeader = member();
+		newTeam(otherLeader);
 
 		assertApiError(() -> leaveService.kick(teammate, team.id(), target), ErrorCode.FORBIDDEN);
 		assertApiError(() -> leaveService.kick(outsider, team.id(), target), ErrorCode.FORBIDDEN);
-		assertApiError(() -> leaveService.kick(admin, team.id(), target), ErrorCode.FORBIDDEN);
+		// 다른 팀의 팀장은 이 팀에서 팀장이 아니다
+		assertApiError(() -> leaveService.kick(otherLeader, team.id(), target), ErrorCode.FORBIDDEN);
 
 		assertThat(isActiveMember(team.id(), target)).isTrue();
 		assertThat(redis.hasKey(banKey(team.id(), target))).isFalse();

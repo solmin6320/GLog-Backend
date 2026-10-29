@@ -1,25 +1,28 @@
 # 팀 (기능명세서 2장): 생성·참가·아이디 초대·추방·탈퇴·위임·삭제·공개 설정. ACTIVE 회원만 호출할 수 있고,
-# 팀장 전용·팀원 전용은 팀을 읽어서 검사한다(비소속·비팀장 FORBIDDEN, 없는/삭제된 팀 NOT_FOUND). 관리자도 예외 없다
+# 팀장 전용·팀원 전용은 팀을 읽어서 검사한다(비소속·비팀장 FORBIDDEN, 없는/삭제된 팀 NOT_FOUND).
+# 시스템 관리자(ADMIN)는 team·teamMembers·teamInviteCode·sentTeamInvitations·updateTeam·inviteToTeam·cancelTeamInvitation·
+# kickTeamMember·transferTeamLeadership·deleteTeam을 소속과 상관없이 모든 팀에 쓸 수 있다. 관리자도 없는/삭제된 팀은 NOT_FOUND.
+# 참가·초대 수락·거절·자진 탈퇴·내 팀 목록에는 관리자 예외가 없다
 
 extend type Query {
     "내 팀 목록 (TM-01). 참가한 순서(오래된 순). TM-01이 페이지 대신 계속 쌓는 목록이라 커서 없이 전부 준다. 비공개 팀도 본인에게는 실제 이름"
     myTeams: [Team!]!
-    "팀 기본 정보. 그 팀의 팀원·팀장만 볼 수 있다"
+    "팀 기본 정보. 그 팀의 팀원·팀장과 시스템 관리자만 볼 수 있다. 팀원이 아닌 시스템 관리자의 joinedAt은 null"
     team(id: ID!): Team!
-    "팀원 목록 (TM-06). 그 팀의 팀원·팀장만. 팀장이 맨 앞, 나머지는 참가한 순서. 커서 기반 20개"
+    "팀원 목록 (TM-06). 그 팀의 팀원·팀장과 시스템 관리자만. 팀장이 맨 앞, 나머지는 참가한 순서. 커서 기반 20개"
     teamMembers(teamId: ID!, "이전 페이지의 nextCursor" after: String): TeamMemberPage!
-    "초대코드 다시 확인 (TM-06). 그 팀의 팀장만. 코드는 생성할 때 한 번 정해지고 재발급은 없다"
+    "초대코드 다시 확인 (TM-06). 그 팀의 팀장과 시스템 관리자만. 코드는 생성할 때 한 번 정해지고 재발급은 없다"
     teamInviteCode(teamId: ID!): String!
     "받은 초대 목록 (TM-04). 최신순, 커서 기반 20개. 비공개 팀이어도 초대받은 당사자에게는 실제 팀 이름"
     receivedTeamInvitations("이전 페이지의 nextCursor" after: String): ReceivedTeamInvitationPage!
-    "보낸 초대 중 대기 중인 목록 (TM-06). 그 팀의 팀장만. 최신순, 커서 기반 20개"
+    "보낸 초대 중 대기 중인 목록 (TM-06). 그 팀의 팀장과 시스템 관리자만. 최신순, 커서 기반 20개"
     sentTeamInvitations(teamId: ID!, "이전 페이지의 nextCursor" after: String): SentTeamInvitationPage!
 }
 
 extend type Mutation {
     "팀을 만든다. 만든 사람이 팀장이고, 초대코드가 이때 한 번 발급된다 (TM-02)"
     createTeam(input: CreateTeamInput!): CreateTeamPayload!
-    "팀의 공개·비공개를 바꾼다 (팀장만, TM-06 ⑦). 이름·소개 수정은 제공하지 않는다"
+    "팀의 공개·비공개를 바꾼다 (팀장과 시스템 관리자만, TM-06 ⑦). 이름·소개 수정은 제공하지 않는다"
     updateTeam(teamId: ID!, input: UpdateTeamInput!): Team!
     """
     초대코드로 참가한다 (TM-03). 대소문자 구분 없음.
@@ -27,12 +30,12 @@ extend type Mutation {
     """
     joinTeamByCode(code: String!): Team!
     """
-    GitHub 아이디로 초대한다 (팀장만, TM-06). 가입한(승인된) 회원만 찾는다.
+    GitHub 아이디로 초대한다 (팀장과 시스템 관리자만, TM-06). 가입한(승인된) 회원만 찾는다.
     없는 아이디 INVITEE_NOT_FOUND, 이미 팀원 INVITEE_ALREADY_MEMBER, 대기 중인 초대가 이미 있으면 INVITATION_DUPLICATE.
     추방한 사람도 초대할 수 있다 (초대코드 차단과 무관)
     """
     inviteToTeam(teamId: ID!, githubLogin: String!): SentTeamInvitation!
-    "보낸 초대를 철회한다 (팀장만). 대기 중인 초대만"
+    "보낸 초대를 철회한다 (팀장과 시스템 관리자만). 대기 중인 초대만"
     cancelTeamInvitation(invitationId: ID!): Boolean!
     """
     받은 초대를 수락해 바로 참가한다 (TM-04).
@@ -42,16 +45,16 @@ extend type Mutation {
     acceptTeamInvitation(invitationId: ID!): Team!
     "받은 초대를 거절한다"
     declineTeamInvitation(invitationId: ID!): Boolean!
-    "팀원을 추방한다 (팀장만). 그 팀 경고 카테고리가 빠지고, 이 팀 초대코드로는 1년간 재참가할 수 없다. 팀장 본인은 추방할 수 없다"
+    "팀원을 추방한다 (팀장과 시스템 관리자만). 그 팀 경고 카테고리가 빠지고, 이 팀 초대코드로는 1년간 재참가할 수 없다. 팀장은 누가 시켜도 추방할 수 없다(위임 후 추방)"
     kickTeamMember(teamId: ID!, memberId: ID!): Boolean!
     """
     팀에서 나간다 (자진 탈퇴, 경고는 유지). 팀장은 나갈 수 없다:
     넘길 팀원이 있으면 LEADER_MUST_TRANSFER, 혼자면 LEADER_LAST_MEMBER(팀 삭제만 가능)
     """
     leaveTeam(teamId: ID!): Boolean!
-    "팀장을 다른 팀원에게 넘긴다 (팀장만). 되돌릴 수 없다"
+    "팀장을 다른 팀원에게 넘긴다 (팀장과 시스템 관리자만). 새 팀장은 현재 팀원이어야 하고, 되돌릴 수 없다"
     transferTeamLeadership(teamId: ID!, newLeaderId: ID!): Team!
-    "팀을 삭제한다 (팀장만). 글은 남고 팀 연결만 끊기며, 팀 경고 카테고리가 빠진다"
+    "팀을 삭제한다 (팀장과 시스템 관리자만). 글은 남고 팀 연결만 끊기며, 팀 경고 카테고리가 빠진다"
     deleteTeam(teamId: ID!): Boolean!
 }
 
@@ -69,8 +72,8 @@ type Team {
     "내가 이 팀의 팀장인가"
     isLeader: Boolean!
     memberCount: Int!
-    "내가 이 팀에 참가한 시각 (KST, ISO-8601)"
-    joinedAt: String!
+    "내가 이 팀에 참가한 시각 (KST, ISO-8601). 팀원이 아닌 시스템 관리자는 null"
+    joinedAt: String
     createdAt: String!
 }
 

@@ -79,11 +79,13 @@ class TeamDeleteIntegrationTest extends TeamIntegrationTest {
 		CreatedTeam team = newTeam(leader);
 		long teammate = joinedMember(team);
 		long outsider = member();
-		long admin = adminMember();
+		long otherLeader = member();
+		newTeam(otherLeader);
 
 		assertApiError(() -> leaveService.delete(teammate, team.id()), ErrorCode.FORBIDDEN);
 		assertApiError(() -> leaveService.delete(outsider, team.id()), ErrorCode.FORBIDDEN);
-		assertApiError(() -> leaveService.delete(admin, team.id()), ErrorCode.FORBIDDEN);
+		// 다른 팀의 팀장은 이 팀에서 팀장이 아니다
+		assertApiError(() -> leaveService.delete(otherLeader, team.id()), ErrorCode.FORBIDDEN);
 
 		assertThat(teamRow(team.id()).get("deleted_at")).isNull();
 		assertThat(activeMemberCount(team.id())).isEqualTo(2);

@@ -118,13 +118,39 @@ class TeamBoardAccessIntegrationTest extends TeamBoardTestBase {
 
 	@ParameterizedTest
 	@ValueSource(booleans = {true, false})
-	void 관리자도_소속이_아니면_공개든_비공개든_현황판을_볼_수_없다(boolean isPublic) {
+	void 관리자는_소속이_아니어도_공개든_비공개든_현황판을_본다(boolean isPublic) {
 		TeamRef team = isPublic ? publicTeam : createTeam(leader, false);
 		long admin = admin();
 
-		assertDenied(boardResponse(admin, team.id()), ErrorCode.FORBIDDEN);
-		assertDenied(graphQl.post(bearerFor(admin), TEAM_SUMMARY_QUERY, Map.of("id", Long.toString(team.id()))),
-				ErrorCode.FORBIDDEN);
+		JsonNode board = board(admin, team.id());
+
+		// 관리자는 팀원이 아니라 목록에 없고, 내 행도 없다
+		assertThat(memberIdsOf(board)).contains(leader).doesNotContain(admin);
+		board.path("members").forEach(row -> assertThat(row.path("isMe").asBoolean()).isFalse());
+	}
+
+	// TM-01 ⑧ 이번 주 요약은 team 아래에 있어서, team이 열린 관리자에게도 팀원과 같은 값이 나간다
+	@Test
+	void 관리자는_소속이_아니어도_team_조회로_이번_주_요약을_받는다() {
+		Map<String, Object> id = Map.of("id", Long.toString(publicTeam.id()));
+
+		GraphQlResponse byAdmin = graphQl.post(bearerFor(admin()), TEAM_SUMMARY_QUERY, id);
+		GraphQlResponse byMate = graphQl.post(bearerFor(mate), TEAM_SUMMARY_QUERY, id);
+
+		assertThat(byAdmin.hasErrors()).as(byAdmin.rawBody()).isFalse();
+		assertThat(byAdmin.data().path("team").path("weekSummary").isObject()).isTrue();
+		assertThat(byAdmin.data().path("team").path("weekSummary")).isEqualTo(byMate.data().path("team").path("weekSummary"));
+	}
+
+	@Test
+	void 팀장이어도_다른_팀의_현황판은_볼_수_없다() {
+		long otherLeader = member();
+		TeamRef other = createTeam(otherLeader, false);
+		settleFirstWeek(otherLeader);
+
+		assertDenied(boardResponse(otherLeader, publicTeam.id()), ErrorCode.FORBIDDEN);
+		assertDenied(boardResponse(leader, other.id()), ErrorCode.FORBIDDEN);
+		assertDenied(boardResponse(outsider, other.id()), ErrorCode.FORBIDDEN);
 	}
 
 	@Test

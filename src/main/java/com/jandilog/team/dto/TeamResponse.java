@@ -4,7 +4,8 @@ import java.time.LocalDateTime;
 
 import com.jandilog.team.domain.Team;
 
-// GraphQL Team 타입. 소속 팀원이 보는 화면이라 비공개 팀도 실제 이름이다. 초대코드는 담지 않는다(팀장 전용 조회로만)
+// GraphQL Team 타입. 소속 팀원이 보는 화면이라 비공개 팀도 실제 이름이다(시스템 관리자도 같다). 초대코드는 담지 않는다(팀장 전용 조회로만).
+// joinedAt은 팀원이 아닌 시스템 관리자에게는 null
 public record TeamResponse(
 		Long id,
 		String name,
