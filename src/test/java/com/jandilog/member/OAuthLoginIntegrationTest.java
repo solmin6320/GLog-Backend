@@ -43,6 +43,7 @@ import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.member.repository.MemberRepository;
 import com.jandilog.member.service.MemberApprovalService;
 import com.jandilog.testsupport.auth.AuthIntegrationTest;
+import com.jandilog.testsupport.auth.GraphQlHttpClient.GraphQlResponse;
 import com.jandilog.testsupport.auth.MemberFixture.MemberRow;
 
 // GitHub 인증 성공 이후 처리: 회원 upsert, 일회용 코드 발급, 복귀 주소 (기능명세서 1장, E-02)
@@ -95,7 +96,7 @@ class OAuthLoginIntegrationTest extends AuthIntegrationTest {
 	}
 
 	@Test
-	void 첫_로그인은_승인_대기_회원을_만들고_일회용_코드를_발급한다() {
+	void 첫_로그인은_바로_쓰는_활성_회원을_만들고_일회용_코드를_발급한다() {
 		Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 		clock.fixAt(now);
 		long githubId = members.nextGithubId();
@@ -103,18 +104,40 @@ class OAuthLoginIntegrationTest extends AuthIntegrationTest {
 		LoginResult result = login(githubId, "octocat", "홍길동");
 
 		MemberRow row = members.findByGithubId(githubId).orElseThrow();
-		assertThat(row.status()).isEqualTo(MemberStatus.PENDING);
+		assertThat(row.status()).isEqualTo(MemberStatus.ACTIVE);
 		assertThat(row.role()).isEqualTo(MemberRole.MEMBER);
 		assertThat(row.githubLogin()).isEqualTo("octocat");
 		assertThat(row.nickname()).isEqualTo("홍길동");
 		assertThat(row.profileImageUrl()).isNull();
 		assertThat(row.createdAt()).isEqualTo(LocalDateTime.ofInstant(now, KST));
-		assertThat(row.approvedAt()).isNull();
+		assertThat(row.approvedAt()).isEqualTo(LocalDateTime.ofInstant(now, KST));
 
 		assertThat(result.error()).isNull();
 		assertThat(result.location()).startsWith(authProperties.webBaseUrl() + "/auth/callback?code=");
 		assertThat(result.code()).matches("^[A-Za-z0-9_-]{43}$");
 		assertThat(redis.opsForValue().get("authcode:" + result.code())).isEqualTo(Long.toString(row.id()));
+	}
+
+	// 가입 승인 없이 첫 로그인 직후 받은 토큰으로 활성 회원 전용 기능을 부른다
+	@Test
+	void 첫_로그인한_회원은_승인_없이_바로_회원_기능을_쓸_수_있다() {
+		long githubId = members.nextGithubId();
+		LoginResult result = login(githubId, "newbie", "새 회원");
+
+		GraphQlResponse exchanged = graphQl.post(null, """
+				mutation($code: String!) {
+				  exchangeAuthCode(code: $code) { accessToken me { status role } }
+				}
+				""", Map.of("code", result.code()));
+
+		assertThat(exchanged.hasErrors()).as(exchanged.rawBody()).isFalse();
+		var payload = exchanged.data().path("exchangeAuthCode");
+		assertThat(payload.path("me").path("status").asText()).isEqualTo("ACTIVE");
+		assertThat(payload.path("me").path("role").asText()).isEqualTo("MEMBER");
+		GraphQlResponse teams = graphQl.post(payload.path("accessToken").asText(), "{ myTeams { id } }");
+		assertThat(teams.hasErrors()).as(teams.rawBody()).isFalse();
+		assertThat(teams.data().path("myTeams").isArray()).isTrue();
+		assertThat(teams.data().path("myTeams")).isEmpty();
 	}
 
 	@Test

@@ -32,7 +32,8 @@ public class MemberService {
 		this.adminGithubIds = adminProperties.githubIdSet();
 	}
 
-	// GitHub 숫자 id로 회원을 찾아 login·nickname을 갱신하고, 없으면 승인 대기로 만든다.
+	// GitHub 숫자 id로 회원을 찾아 login·nickname을 갱신하고, 없으면 바로 쓰는 일반 활성 회원으로 만든다(가입 승인 없음).
+	// 이미 있는 승인 대기·거절 회원의 상태는 로그인으로 바꾸지 않는다.
 	// ADMIN_GITHUB_IDS에 있는 id는 새 회원이면 처음부터 활성 관리자, 기존 회원이면 상태와 상관없이 활성 관리자로 올린다.
 	// 목록에서 빠져도 기존 관리자를 강등하지 않는다. admin_action_log에는 남기지 않고 로그에만 승격 사실을 남긴다
 	@Transactional
@@ -44,7 +45,7 @@ public class MemberService {
 			LocalDateTime now = LocalDateTime.now(clock);
 			Member created = memberRepository.saveAndFlush(listedAdmin
 					? Member.createAdmin(githubId, githubLogin, nickname, now)
-					: Member.createPending(githubId, githubLogin, nickname, now));
+					: Member.createActive(githubId, githubLogin, nickname, now));
 			if (listedAdmin) {
 				log.info("관리자 목록의 GitHub 계정이라 처음부터 관리자로 만들었어요 (memberId={})", created.getId());
 			}
