@@ -231,12 +231,14 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 		CreatedTeam team = newTeam(leader);
 		long teammate = joinedMember(team);
 		long outsider = member();
-		long admin = adminMember();
+		long otherLeader = member();
+		newTeam(otherLeader);
 		long invitee = member();
 
 		assertApiError(() -> invite(teammate, team, invitee), ErrorCode.FORBIDDEN);
 		assertApiError(() -> invite(outsider, team, invitee), ErrorCode.FORBIDDEN);
-		assertApiError(() -> invite(admin, team, invitee), ErrorCode.FORBIDDEN);
+		// 다른 팀의 팀장은 이 팀에서 팀장이 아니다
+		assertApiError(() -> invite(otherLeader, team, invitee), ErrorCode.FORBIDDEN);
 
 		assertThat(invitationCount(team.id())).isZero();
 	}
@@ -346,7 +348,9 @@ class TeamInvitationIntegrationTest extends TeamIntegrationTest {
 
 		assertApiError(() -> invitationService.cancel(teammate, sent.id()), ErrorCode.FORBIDDEN);
 		assertApiError(() -> invitationService.cancel(invitee, sent.id()), ErrorCode.FORBIDDEN);
-		assertApiError(() -> invitationService.cancel(adminMember(), sent.id()), ErrorCode.FORBIDDEN);
+		long otherLeader = member();
+		newTeam(otherLeader);
+		assertApiError(() -> invitationService.cancel(otherLeader, sent.id()), ErrorCode.FORBIDDEN);
 
 		assertThat(statusOf(sent.id())).isEqualTo("PENDING");
 	}

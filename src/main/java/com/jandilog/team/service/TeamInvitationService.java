@@ -66,12 +66,12 @@ public class TeamInvitationService {
 		this.clock = clock;
 	}
 
-	// 팀장이 GitHub 아이디로 초대한다. 가입한(승인된) 회원 중에서만 찾고(E-15), 이미 팀원이면 만들지 않으며(E-16),
+	// 팀장(또는 시스템 관리자)이 GitHub 아이디로 초대한다. 가입한(승인된) 회원 중에서만 찾고(E-15), 이미 팀원이면 만들지 않으며(E-16),
 	// 같은 사람에게 대기 중인 초대가 있으면 하나 더 만들지 않는다
 	@Transactional(isolation = Isolation.READ_COMMITTED)
-	public SentInvitationResponse invite(long leaderId, long teamId, String rawLogin) {
+	public SentInvitationResponse invite(long actorId, long teamId, String rawLogin) {
 		Team team = access.requireAliveForUpdate(teamId);
-		access.requireLeader(team, leaderId);
+		boolean asAdmin = access.requireLeaderOrAdmin(team, actorId);
 
 		Member invitee = findInvitee(rawLogin);
 		if (teamMemberRepository.existsByTeamIdAndMemberIdAndLeftAtIsNull(teamId, invitee.getId())) {
@@ -84,15 +84,18 @@ public class TeamInvitationService {
 		}
 		TeamInvitation invitation = invitationRepository.saveAndFlush(TeamInvitation.create(teamId, invitee.getId(),
 				LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS)));
+		if (asAdmin) {
+			access.logAdminUse("초대", actorId, teamId, invitee.getId());
+		}
 		return new SentInvitationResponse(invitation.getId(), TeamPersonResponse.from(invitee),
 				TeamTimes.format(invitation.getCreatedAt()));
 	}
 
-	// TM-06 ③ 보낸 초대(대기 중), 최신순. 팀장만. 커서 기반 20개 (Q-06)
+	// TM-06 ③ 보낸 초대(대기 중), 최신순. 팀장과 시스템 관리자만. 커서 기반 20개 (Q-06)
 	@Transactional(readOnly = true)
-	public CursorPage<SentInvitationResponse> sent(long leaderId, long teamId, String cursor) {
+	public CursorPage<SentInvitationResponse> sent(long actorId, long teamId, String cursor) {
 		Team team = access.requireAlive(teamId);
-		access.requireLeader(team, leaderId);
+		access.requireLeaderOrAdmin(team, actorId);
 		TeamCursor after = TeamCursor.parse(cursor);
 
 		List<TeamInvitation> rows = after == null
@@ -113,17 +116,20 @@ public class TeamInvitationService {
 		return new CursorPage<>(items, page.nextCursor());
 	}
 
-	// 팀장이 보낸 초대를 철회한다(TM-06 ③ [취소]). 대기 중인 초대만 지운다
+	// 팀장(또는 시스템 관리자)이 보낸 초대를 철회한다(TM-06 ③ [취소]). 대기 중인 초대만 지운다
 	@Transactional(isolation = Isolation.READ_COMMITTED)
-	public void cancel(long leaderId, long invitationId) {
+	public void cancel(long actorId, long invitationId) {
 		long teamId = invitationRepository.findTeamIdById(invitationId)
 				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 		Team team = access.requireAliveForUpdate(teamId);
-		access.requireLeader(team, leaderId);
+		boolean asAdmin = access.requireLeaderOrAdmin(team, actorId);
 		TeamInvitation invitation = invitationRepository.findByIdForUpdate(invitationId)
 				.filter(TeamInvitation::isPending)
 				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 		invitationRepository.delete(invitation);
+		if (asAdmin) {
+			access.logAdminUse("초대 철회", actorId, teamId, invitation.getInviteeId());
+		}
 	}
 
 	// TM-04: 받은 초대, 최신순. 삭제된 팀의 초대는 빠진다. 비공개 팀도 당사자에게는 실제 이름. 커서 기반 20개 (Q-06)
