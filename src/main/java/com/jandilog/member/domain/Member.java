@@ -55,7 +55,7 @@ public class Member {
 	protected Member() {
 	}
 
-	// 첫 로그인: 승인 대기 회원으로 만든다 (기능명세서 1장)
+	// 승인 대기 회원. 가입 승인을 없앤 뒤로는 첫 로그인이 만들지 않는다
 	public static Member createPending(long githubId, String githubLogin, String nickname, LocalDateTime now) {
 		Member member = new Member();
 		member.githubId = githubId;
@@ -67,14 +67,20 @@ public class Member {
 		return member;
 	}
 
+	// 첫 로그인: 승인 절차 없이 바로 쓰는 일반 활성 회원으로 만든다 (2026-10-29 사용자 지시)
+	public static Member createActive(long githubId, String githubLogin, String nickname, LocalDateTime now) {
+		Member member = createPending(githubId, githubLogin, nickname, now);
+		member.status = MemberStatus.ACTIVE;
+		member.approvedAt = now;
+		return member;
+	}
+
 	// ADMIN_GITHUB_IDS에 있는 첫 로그인: 승인 절차 없이 활성 관리자로 만든다
-public static Member createAdmin(long githubId, String githubLogin, String nickname, LocalDateTime now) {
-	Member member = createPending(githubId, githubLogin, nickname, now);
-	member.status = MemberStatus.ACTIVE;
-	member.role = MemberRole.ADMIN;
-	member.approvedAt = now;
-	return member;
-}
+	public static Member createAdmin(long githubId, String githubLogin, String nickname, LocalDateTime now) {
+		Member member = createActive(githubId, githubLogin, nickname, now);
+		member.role = MemberRole.ADMIN;
+		return member;
+	}
 
 // 로그인마다 GitHub 최신값으로 덮어쓴다 (DB명세서 1-1)
 	public void syncGithubProfile(String githubLogin, String nickname) {
