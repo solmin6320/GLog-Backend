@@ -1,9 +1,6 @@
 spring:
   application:
     name: jandilog
-  # 로컬 .env가 있으면 읽는다. 운영은 OS 환경변수 (환경변수가 .env보다 우선)
-  config:
-    import: optional:file:.env[.properties]
   # GitHub OAuth App. 값은 환경변수로만 받는다 (기본값 없음)
   security:
     oauth2:
@@ -122,3 +119,11 @@ management:
   health:
     redis:
       enabled: false
+
+---
+# 로컬 .env가 있으면 읽는다. 운영은 OS 환경변수 (환경변수가 .env보다 우선). test 프로필은 읽지 않는다
+spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: optional:file:.env[.properties]
