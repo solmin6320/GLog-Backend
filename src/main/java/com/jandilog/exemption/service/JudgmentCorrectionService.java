@@ -2,6 +2,7 @@ package com.jandilog.exemption.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +25,7 @@ import com.jandilog.exemption.repository.JudgmentCorrectionRepository;
 import com.jandilog.exemption.repository.JudgmentLookupRepository;
 import com.jandilog.judgment.domain.JudgmentStatus;
 import com.jandilog.judgment.domain.JudgmentTeam;
+import com.jandilog.judgment.domain.JudgmentWeek;
 import com.jandilog.judgment.domain.SkipReason;
 import com.jandilog.judgment.domain.WeeklyJudgment;
 import com.jandilog.judgment.repository.JudgmentTeamRepository;
@@ -31,6 +33,7 @@ import com.jandilog.judgment.repository.WeeklyJudgmentRepository;
 import com.jandilog.member.domain.Member;
 import com.jandilog.member.dto.MemberBrief;
 import com.jandilog.member.repository.MemberRepository;
+import com.jandilog.team.service.TeamWarningService;
 import com.jandilog.warning.domain.Warning;
 import com.jandilog.warning.domain.WarningTeam;
 import com.jandilog.warning.dto.RecalcImpact;
@@ -60,6 +63,7 @@ public class JudgmentCorrectionService {
 	private final MemberRepository memberRepository;
 	private final WarningRecalculationService recalculationService;
 	private final RecalcImpactService impactService;
+	private final TeamWarningService teamWarningService;
 	private final Clock clock;
 
 	public JudgmentCorrectionService(JudgmentLookupRepository lookupRepository,
@@ -67,7 +71,7 @@ public class JudgmentCorrectionService {
 			WarningRepository warningRepository, WarningTeamRepository warningTeamRepository,
 			JudgmentCorrectionRepository correctionRepository, AdminActionLogRepository actionLogRepository,
 			MemberRepository memberRepository, WarningRecalculationService recalculationService,
-			RecalcImpactService impactService, Clock clock) {
+			RecalcImpactService impactService, TeamWarningService teamWarningService, Clock clock) {
 		this.lookupRepository = lookupRepository;
 		this.judgmentRepository = judgmentRepository;
 		this.judgmentTeamRepository = judgmentTeamRepository;
@@ -78,6 +82,7 @@ public class JudgmentCorrectionService {
 		this.memberRepository = memberRepository;
 		this.recalculationService = recalculationService;
 		this.impactService = impactService;
+		this.teamWarningService = teamWarningService;
 		this.clock = clock;
 	}
 
@@ -88,7 +93,8 @@ public class JudgmentCorrectionService {
 				.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 		requireCorrectable(judgment, target);
 		Member member = memberOf(judgment);
-		RecalcImpact impact = impactService.ofStatusChange(judgment.getMemberId(), judgment.getWeekStart(), target);
+		RecalcImpact impact = impactService.ofStatusChange(judgment.getMemberId(), judgment.getWeekStart(), target,
+				newWarningDeleted(judgment, target));
 		return new CorrectionPreview(judgment.getId(), MemberBrief.from(member), judgment.getWeekStart().toString(),
 				judgment.getStatus(), target, impact);
 	}
@@ -158,6 +164,18 @@ public class JudgmentCorrectionService {
 		}
 	}
 
+	// 미달로 정정하면 새로 만들 경고가 그 사이 추방·팀 삭제로 삭제 표시가 되는가. 반영(ensureWarning)과 같은 규칙이다
+	private boolean newWarningDeleted(WeeklyJudgment judgment, JudgmentStatus target) {
+		if (target != JudgmentStatus.FAIL
+				|| warningRepository.findByMemberIdAndWeekStart(judgment.getMemberId(), judgment.getWeekStart()).isPresent()) {
+			return false;
+		}
+		List<Long> teamIds = judgmentTeamRepository.findByJudgmentId(judgment.getId()).stream()
+				.map(JudgmentTeam::getTeamId).toList();
+		return teamWarningService.wouldRemoveAllCategories(judgment.getMemberId(), teamIds,
+				JudgmentWeek.endExclusive(judgment.getWeekStart()).minusSeconds(1));
+	}
+
 	// 미달로 정정하면 그 주 경고를 부여한다 (E-49). 이미 레코드가 있으면(삭제 표시 포함) 새로 만들지 않는다:
 	// 같은 주 경고는 사람당 하나이고(UNIQUE), 삭제된 경고는 관리자 복구로만 되살린다 (E-60)
 	private void ensureWarning(WeeklyJudgment judgment, LocalDateTime now) {
@@ -167,9 +185,13 @@ public class JudgmentCorrectionService {
 		List<JudgmentTeam> teams = judgmentTeamRepository.findByJudgmentId(judgment.getId());
 		Warning warning = warningRepository
 				.saveAndFlush(Warning.create(judgment.getMemberId(), judgment.getWeekStart(), now));
+		List<WarningTeam> categories = new ArrayList<>();
 		for (JudgmentTeam team : teams) {
-			warningTeamRepository.save(WarningTeam.of(warning.getId(), team.getTeamId()));
+			categories.add(warningTeamRepository.save(WarningTeam.of(warning.getId(), team.getTeamId())));
 		}
+		// 그 주가 끝난 뒤 추방·팀 삭제로 빠졌을 카테고리는 빼고, 남은 팀이 없으면 삭제 표시로 둔다
+		teamWarningService.applyTeamChangesSince(warning, categories,
+				JudgmentWeek.endExclusive(judgment.getWeekStart()).minusSeconds(1));
 	}
 
 }

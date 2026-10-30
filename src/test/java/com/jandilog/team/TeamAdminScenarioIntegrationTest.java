@@ -279,6 +279,17 @@ class TeamAdminScenarioIntegrationTest extends TeamIntegrationTest {
 	}
 
 	@Test
+	void 팀원인_관리자는_자기_자신을_추방할_수_없고_소속과_차단_키와_기록이_그대로다() {
+		joinService.joinByCode(admin, teamA.inviteCode());
+
+		assertGraphQlError(run(admin, "kickTeamMember", teamA.id(), admin), ErrorCode.INVALID_INPUT);
+
+		assertThat(isActiveMember(teamA.id(), admin)).isTrue();
+		assertThat(redis.hasKey(banKey(teamA.id(), admin))).isFalse();
+		assertThat(adminLogs(admin)).isEmpty();
+	}
+
+	@Test
 	void 관리자가_팀장이면_isLeader와_참가_시각이_있고_위임해도_참가_시각은_그대로다() {
 		CreatedTeam own = newTeam(admin, "관리자가 만든 팀", null, true);
 		long ownMate = joinedMember(own);

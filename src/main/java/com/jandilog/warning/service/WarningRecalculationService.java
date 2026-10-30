@@ -66,7 +66,7 @@ public class WarningRecalculationService {
 	@Transactional
 	public WarningRecalcResult recalculate(long memberId) {
 		lockMember(memberId);
-		return compute(load(memberId), Map.of(), Set.of());
+		return compute(load(memberId), Map.of(), Set.of(), Set.of());
 	}
 
 	// 여러 회원을 잠그고 한 번에 다시 계산한다. 결과는 회원마다 recalculate를 부른 것과 같다
@@ -79,7 +79,7 @@ public class WarningRecalculationService {
 	// 락 없이 읽기만 한다. 화면의 경고 수·연속 통과 표시용
 	@Transactional(readOnly = true)
 	public WarningRecalcResult calculate(long memberId) {
-		return compute(load(memberId), Map.of(), Set.of());
+		return compute(load(memberId), Map.of(), Set.of(), Set.of());
 	}
 
 	// 여러 회원을 락 없이 한 번에 계산한다. 목록 화면(팀 현황판·벌칙 대상·관리자 목록)이 회원 수만큼 쿼리를 다시 부르지 않게
@@ -100,14 +100,22 @@ public class WarningRecalculationService {
 	@Transactional(readOnly = true)
 	public WarningRecalcPreview preview(long memberId, Map<LocalDate, JudgmentStatus> hypothetical,
 			Set<LocalDate> restoredWarningWeeks) {
+		return preview(memberId, hypothetical, restoredWarningWeeks, Set.of());
+	}
+
+	// 정정 미리보기: deletedNewWarningWeeks에 든 주는 새로 생길 경고가 삭제 표시로 만들어진다고 가정한다
+	// (그 주가 끝난 뒤 추방·팀 삭제로 남는 카테고리가 없을 때)
+	@Transactional(readOnly = true)
+	public WarningRecalcPreview preview(long memberId, Map<LocalDate, JudgmentStatus> hypothetical,
+			Set<LocalDate> restoredWarningWeeks, Set<LocalDate> deletedNewWarningWeeks) {
 		History history = load(memberId);
-		return new WarningRecalcPreview(compute(history, Map.of(), Set.of()),
-				compute(history, hypothetical, restoredWarningWeeks));
+		return new WarningRecalcPreview(compute(history, Map.of(), Set.of(), Set.of()),
+				compute(history, hypothetical, restoredWarningWeeks, deletedNewWarningWeeks));
 	}
 
 	private Map<Long, WarningRecalcResult> computeAll(Collection<Long> memberIds) {
 		Map<Long, WarningRecalcResult> results = new HashMap<>();
-		loadAll(memberIds).forEach((memberId, history) -> results.put(memberId, compute(history, Map.of(), Set.of())));
+		loadAll(memberIds).forEach((memberId, history) -> results.put(memberId, compute(history, Map.of(), Set.of(), Set.of())));
 		return results;
 	}
 
@@ -138,17 +146,19 @@ public class WarningRecalculationService {
 	}
 
 	private WarningRecalcResult compute(History history, Map<LocalDate, JudgmentStatus> hypothetical,
-			Set<LocalDate> restoredWarningWeeks) {
+			Set<LocalDate> restoredWarningWeeks, Set<LocalDate> deletedNewWarningWeeks) {
 		Map<LocalDate, WeekEntry> entries = new TreeMap<>();
 		for (WeeklyJudgment judgment : history.judgments()) {
 			LocalDate week = judgment.getWeekStart();
 			JudgmentStatus status = hypothetical.getOrDefault(week, judgment.getStatus());
 			Warning warning = history.warnings().get(week);
-			boolean deleted = warning != null && !warning.isAlive() && !restoredWarningWeeks.contains(week);
+			boolean deleted = warning != null ? !warning.isAlive() && !restoredWarningWeeks.contains(week)
+					: deletedNewWarningWeeks.contains(week);
 			entries.put(week, new WeekEntry(week, status, deleted));
 		}
 		// 판정 행이 아직 없는 주를 가정한 경우도 한 주로 넣는다
-		hypothetical.forEach((week, status) -> entries.putIfAbsent(week, new WeekEntry(week, status, false)));
+		hypothetical.forEach((week, status) -> entries.putIfAbsent(week,
+				new WeekEntry(week, status, deletedNewWarningWeeks.contains(week))));
 		return WarningRecalculator.recalculate(entries.values(), history.baseline());
 	}
 

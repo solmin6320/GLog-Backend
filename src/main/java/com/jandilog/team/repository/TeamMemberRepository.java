@@ -70,4 +70,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 			""")
 	List<TeamMember> findMembershipsAt(@Param("memberIds") Collection<Long> memberIds, @Param("at") LocalDateTime at);
 
+	// 한 회원의 여러 팀 소속 이력(나간 행 포함)
+	List<TeamMember> findByMemberIdAndTeamIdIn(long memberId, Collection<Long> teamIds);
+
 }

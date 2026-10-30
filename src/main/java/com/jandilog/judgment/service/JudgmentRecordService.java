@@ -1,6 +1,7 @@
 package com.jandilog.judgment.service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -13,10 +14,12 @@ import com.jandilog.judgment.domain.DayResult;
 import com.jandilog.judgment.domain.JudgmentDay;
 import com.jandilog.judgment.domain.JudgmentResult;
 import com.jandilog.judgment.domain.JudgmentTeam;
+import com.jandilog.judgment.domain.JudgmentWeek;
 import com.jandilog.judgment.domain.WeeklyJudgment;
 import com.jandilog.judgment.repository.JudgmentDayRepository;
 import com.jandilog.judgment.repository.JudgmentTeamRepository;
 import com.jandilog.judgment.repository.WeeklyJudgmentRepository;
+import com.jandilog.team.service.TeamWarningService;
 import com.jandilog.warning.domain.Warning;
 import com.jandilog.warning.domain.WarningTeam;
 import com.jandilog.warning.repository.WarningRepository;
@@ -47,16 +50,19 @@ public class JudgmentRecordService {
 	private final WarningRepository warningRepository;
 	private final WarningTeamRepository warningTeamRepository;
 	private final WarningRecalculationService recalculationService;
+	private final TeamWarningService teamWarningService;
 
 	public JudgmentRecordService(WeeklyJudgmentRepository judgmentRepository, JudgmentTeamRepository teamRepository,
 			JudgmentDayRepository dayRepository, WarningRepository warningRepository,
-			WarningTeamRepository warningTeamRepository, WarningRecalculationService recalculationService) {
+			WarningTeamRepository warningTeamRepository, WarningRecalculationService recalculationService,
+			TeamWarningService teamWarningService) {
 		this.judgmentRepository = judgmentRepository;
 		this.teamRepository = teamRepository;
 		this.dayRepository = dayRepository;
 		this.warningRepository = warningRepository;
 		this.warningTeamRepository = warningTeamRepository;
 		this.recalculationService = recalculationService;
+		this.teamWarningService = teamWarningService;
 	}
 
 	// snapshotTeamIds: 주 종료 시각 소속 스냅샷. 처음 저장할 때만 쓰고 보류 재실행에서는 저장된 스냅샷을 그대로 쓴다
@@ -123,9 +129,13 @@ public class JudgmentRecordService {
 		}
 		Warning warning = warningRepository.saveAndFlush(
 				Warning.create(judgment.getMemberId(), judgment.getWeekStart(), result.judgedAt()));
+		List<WarningTeam> categories = new ArrayList<>();
 		for (JudgmentTeam team : teams) {
-			warningTeamRepository.save(WarningTeam.of(warning.getId(), team.getTeamId()));
+			categories.add(warningTeamRepository.save(WarningTeam.of(warning.getId(), team.getTeamId())));
 		}
+		// 주가 끝난 뒤 판정 전에 추방·팀 삭제가 있었으면 그 카테고리를 뺀다
+		teamWarningService.applyTeamChangesSince(warning, categories,
+				JudgmentWeek.endExclusive(judgment.getWeekStart()).minusSeconds(1));
 	}
 
 }

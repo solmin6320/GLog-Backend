@@ -93,7 +93,8 @@ public class TeamLeaveService {
 	public void kick(long actorId, long teamId, long targetId) {
 		Team team = access.requireAliveForUpdate(teamId);
 		boolean asAdmin = access.requireLeaderOrAdmin(team, actorId);
-		if (team.isLeader(targetId)) {
+		// 팀장과 본인은 추방할 수 없다. 팀원인 관리자가 자기를 추방하면 탈퇴와 달리 경고 카테고리가 빠진다
+		if (team.isLeader(targetId) || targetId == actorId) {
 			throw new ApiException(ErrorCode.INVALID_INPUT);
 		}
 		TeamMember target = teamMemberRepository.findByTeamIdAndMemberIdAndLeftAtIsNull(teamId, targetId)
