@@ -89,7 +89,7 @@ public class TeamBoardService {
 				members, recentPosts(teamId));
 	}
 
-	// 팀들의 이번 주 통과·미달·아직 인원. 팀 목록 전체를 쿼리 몇 번으로 센다. 호출하는 쪽이 팀 열람 권한을 이미 확인한 팀만 넘긴다
+	// 팀들의 이번 주 통과·미달·아직·제외 인원. 팀 목록 전체를 쿼리 몇 번으로 센다. 호출하는 쪽이 팀 열람 권한을 이미 확인한 팀만 넘긴다
 	@Transactional(readOnly = true)
 	public Map<Long, TeamWeekSummaryResponse> weekSummaries(Collection<Long> teamIds) {
 		LocalDate weekStart = currentWeekStart();
@@ -104,7 +104,8 @@ public class TeamBoardService {
 		for (Long teamId : teamIds) {
 			StatusCount count = tally.getOrDefault(teamId, new StatusCount());
 			result.put(teamId,
-					new TeamWeekSummaryResponse(weekStart.toString(), count.pass, count.fail, count.notYet));
+					new TeamWeekSummaryResponse(weekStart.toString(), count.pass, count.fail, count.notYet,
+							count.excluded));
 		}
 		return result;
 	}
@@ -116,21 +117,21 @@ public class TeamBoardService {
 				week.verifiedDays(), week.recordCount(), warningCount, week.status());
 	}
 
-	// 팀 하나의 이번 주 통과·미달·아직 인원
+	// 팀 하나의 이번 주 통과·미달·아직·제외 인원
 	private static final class StatusCount {
 
 		private int pass;
 		private int fail;
 		private int notYet;
+		private int excluded;
 
 		void add(TeamBoardStatus status) {
 			switch (status) {
 				case PASS -> pass++;
 				case FAIL -> fail++;
 				case NOT_YET -> notYet++;
-				case EXCLUDED -> {
-					// 판정 제외·면제는 어느 쪽에도 세지 않는다
-				}
+				// 판정 제외·면제
+				case EXCLUDED -> excluded++;
 			}
 		}
 

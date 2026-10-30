@@ -89,4 +89,6 @@ type TeamWeekSummary {
     failCount: Int!
     "아직 못 채웠지만 주가 진행 중인 인원"
     notYetCount: Int!
+    "판정 제외·면제 인원. 통과·미달·아직 어디에도 세지 않는다"
+    excludedCount: Int!
 }
