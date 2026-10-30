@@ -137,7 +137,7 @@ public class TeamLeaveService {
 		if (asAdmin) {
 			recordAdminAction(actorId, AdminActionType.DELETE_TEAM, TARGET_TYPE_TEAM, teamId, now);
 		}
-		// 마지막 단계: Mongo가 실패하면 앞선 MariaDB 변경도 롤백된다
+		// 마지막 단계: Mongo가 실패하면 앞선 PostgreSQL 변경도 롤백된다
 		postLinkService.unlinkTeam(teamId);
 		if (asAdmin) {
 			access.logAdminUse("팀 삭제", actorId, teamId, null);

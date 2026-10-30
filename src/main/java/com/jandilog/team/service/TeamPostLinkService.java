@@ -12,8 +12,8 @@ import com.jandilog.post.domain.Post;
 import com.jandilog.team.repository.TeamPostIndexRepository;
 
 // 팀 삭제 때 글의 팀 연결을 두 곳 모두 끊는다. 글은 남고 팀 연결만 해제된다 (기능명세서 2장, DB명세서 4-4).
-// Mongo posts와 MariaDB post_index를 함께 바꿔야 글 목록과 판정 색인이 서로 다른 팀을 가리키지 않는다.
-// MariaDB 트랜잭션 안의 마지막 단계로 부른다: Mongo가 실패하면 예외가 올라가 앞선 MariaDB 변경도 롤백된다
+// Mongo posts와 PostgreSQL post_index를 함께 바꿔야 글 목록과 판정 색인이 서로 다른 팀을 가리키지 않는다.
+// PostgreSQL 트랜잭션 안의 마지막 단계로 부른다: Mongo가 실패하면 예외가 올라가 앞선 PostgreSQL 변경도 롤백된다
 @Service
 public class TeamPostLinkService {
 

@@ -28,7 +28,7 @@ import com.jandilog.warning.repository.WarningHistoryQueryRepository;
 @Service
 public class WarningHistoryService {
 
-	// 첫 페이지의 커서 상한. MariaDB DATE 범위 안의 먼 미래
+	// 첫 페이지의 커서 상한. PostgreSQL DATE 범위 안의 먼 미래
 	private static final LocalDate CURSOR_START = LocalDate.of(9999, 12, 31);
 
 	private final WarningRecalculationService recalculationService;

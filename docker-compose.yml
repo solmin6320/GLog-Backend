@@ -1,27 +1,23 @@
 # 로컬 개발용 DB 3종 (기능명세서 10장, DB명세서 5-3)
-# 운영은 MariaDB만 서버 컨테이너, MongoDB는 Atlas, Redis는 Upstash를 쓴다
+# 운영은 PostgreSQL은 Neon, MongoDB는 Atlas, Redis는 Upstash를 쓴다
 name: jandilog
 
 services:
-  mariadb:
-    image: mariadb:10.11
-    container_name: jandilog-mariadb
+  # 운영 Neon과 같은 PostgreSQL 16
+  postgres:
+    image: postgres:16
+    container_name: jandilog-postgres
     restart: unless-stopped
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_general_ci
     environment:
-      # root 비밀번호는 기동 시 무작위 생성. 앱 계정(DB_USERNAME)으로 접속한다
-      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
-      MARIADB_DATABASE: ${DB_NAME:-jandilog}
-      MARIADB_USER: ${DB_USERNAME:-jandilog}
-      MARIADB_PASSWORD: ${DB_PASSWORD:-jandilog}
+      POSTGRES_DB: ${DB_NAME:-jandilog}
+      POSTGRES_USER: ${DB_USERNAME:-jandilog}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-jandilog}
     ports:
-      - "127.0.0.1:${DB_PORT:-3306}:3306"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
-      - mariadb-data:/var/lib/mysql
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-jandilog} -d ${DB_NAME:-jandilog}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -57,6 +53,6 @@ services:
       retries: 20
 
 volumes:
-  mariadb-data:
+  postgres-data:
   redis-data:
   mongodb-data:
