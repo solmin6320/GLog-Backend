@@ -41,7 +41,7 @@ public class StubGrassClient implements GrassClient {
 	}
 
 	@Override
-	public List<GrassDay> fetchDailyContributions(String githubLogin, LocalDate from, LocalDate to) {
+	public List<GrassDay> fetchDailyContributions(Long githubId, String githubLogin, LocalDate from, LocalDate to) {
 		calls.incrementAndGet();
 		Runnable action = beforeFetch;
 		beforeFetch = null;

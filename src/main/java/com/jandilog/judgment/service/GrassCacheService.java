@@ -142,6 +142,11 @@ public class GrassCacheService {
 
 	// requiredFrom부터 오늘까지 덮는 오늘 캐시를 돌려준다. 못 덮으면(서버가 오래 꺼졌다 뒤늦게 판정하는 경우) 더 넓게 다시 부른다
 	public GrassSnapshot getOrFetchCovering(long memberId, String githubLogin, LocalDate requiredFrom) {
+		return getOrFetchCovering(memberId, null, githubLogin, requiredFrom);
+	}
+
+	// githubId: 회원의 GitHub 숫자 id. 있으면 아이디의 현재 주인이 같은 계정인지 확인한다 (판정·일괄 갱신은 항상 넘긴다)
+	public GrassSnapshot getOrFetchCovering(long memberId, Long githubId, String githubLogin, LocalDate requiredFrom) {
 		LocalDate today = today();
 		Optional<GrassSnapshot> cached = findCovering(memberId, today, requiredFrom);
 		if (cached.isPresent()) {
@@ -155,7 +160,7 @@ public class GrassCacheService {
 				return cached.get();
 			}
 			LocalDate from = requiredFrom.isBefore(defaultFrom(today)) ? requiredFrom : defaultFrom(today);
-			return fetchAndStore(memberId, githubLogin, from, today);
+			return fetchAndStore(memberId, githubId, githubLogin, from, today);
 		}
 		finally {
 			lock.unlock();
@@ -164,11 +169,15 @@ public class GrassCacheService {
 
 	// 캐시를 무시하고 다시 불러 덮어쓴다. 판정 보류 재시도·새벽 일괄 갱신이 쓴다
 	public GrassSnapshot refresh(long memberId, String githubLogin) {
+		return refresh(memberId, null, githubLogin);
+	}
+
+	public GrassSnapshot refresh(long memberId, Long githubId, String githubLogin) {
 		LocalDate today = today();
 		ReentrantLock lock = lockFor(memberId);
 		lock.lock();
 		try {
-			return fetchAndStore(memberId, githubLogin, defaultFrom(today), today);
+			return fetchAndStore(memberId, githubId, githubLogin, defaultFrom(today), today);
 		}
 		finally {
 			lock.unlock();
@@ -179,8 +188,9 @@ public class GrassCacheService {
 		return find(memberId, today).filter(snapshot -> snapshot.covers(requiredFrom, today));
 	}
 
-	private GrassSnapshot fetchAndStore(long memberId, String githubLogin, LocalDate from, LocalDate today) {
-		List<GrassDay> days = grassClient.fetchDailyContributions(githubLogin, from, today);
+	private GrassSnapshot fetchAndStore(long memberId, Long githubId, String githubLogin, LocalDate from,
+			LocalDate today) {
+		List<GrassDay> days = grassClient.fetchDailyContributions(githubId, githubLogin, from, today);
 		GrassSnapshot snapshot;
 		try {
 			snapshot = new GrassSnapshot(memberId, from, today, LocalDateTime.now(clock.withZone(KST)), days);

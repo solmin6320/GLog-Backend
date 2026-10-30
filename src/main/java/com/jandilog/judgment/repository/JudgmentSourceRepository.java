@@ -21,7 +21,13 @@ import jakarta.persistence.PersistenceContext;
 @Transactional(readOnly = true)
 public class JudgmentSourceRepository {
 
-	public record MemberRef(long id, String githubLogin) {
+	// githubId: GitHub 숫자 id. 잔디 조회 때 아이디의 현재 주인이 같은 계정인지 확인한다
+	public record MemberRef(long id, String githubLogin, Long githubId) {
+
+		public MemberRef(long id, String githubLogin) {
+			this(id, githubLogin, null);
+		}
+
 	}
 
 	@PersistenceContext
@@ -89,11 +95,13 @@ public class JudgmentSourceRepository {
 
 	// 판정·잔디 갱신 대상인 승인된 회원
 	public List<MemberRef> findActiveMembers() {
-		List<?> rows = em.createNativeQuery("select id, github_login from member where status = 'ACTIVE' order by id")
+		List<?> rows = em
+				.createNativeQuery("select id, github_login, github_id from member where status = 'ACTIVE' order by id")
 				.getResultList();
 		return rows.stream()
 				.map(row -> (Object[]) row)
-				.map(columns -> new MemberRef(((Number) columns[0]).longValue(), (String) columns[1]))
+				.map(columns -> new MemberRef(((Number) columns[0]).longValue(), (String) columns[1],
+						((Number) columns[2]).longValue()))
 				.toList();
 	}
 

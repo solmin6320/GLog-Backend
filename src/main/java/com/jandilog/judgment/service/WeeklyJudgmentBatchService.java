@@ -61,7 +61,7 @@ public class WeeklyJudgmentBatchService {
 		int failed = 0;
 		for (MemberRef member : members) {
 			try {
-				grassCacheService.refresh(member.id(), member.githubLogin());
+				grassCacheService.refresh(member.id(), member.githubId(), member.githubLogin());
 				refreshed++;
 			}
 			catch (GrassFetchException e) {

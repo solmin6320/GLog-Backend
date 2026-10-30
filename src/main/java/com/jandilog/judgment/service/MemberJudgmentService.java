@@ -107,7 +107,7 @@ public class MemberJudgmentService {
 	// 잔디 확보: 오늘 캐시를 쓰고 없으면 GitHub를 한 번 부른다. 실패는 그 회원만 보류 사유로 바꾼다 (Q-09)
 	private GrassLookup lookupGrass(Member member, LocalDate weekStart) {
 		try {
-			GrassSnapshot snapshot = grassCacheService.getOrFetchCovering(member.getId(), member.getGithubLogin(),
+			GrassSnapshot snapshot = grassCacheService.getOrFetchCovering(member.getId(), member.getGithubId(), member.getGithubLogin(),
 					weekStart);
 			return GrassLookup.available(snapshot.hasGrassBetween(weekStart, weekStart.plusDays(6)));
 		}
