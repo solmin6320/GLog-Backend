@@ -125,7 +125,7 @@ public class WeeklyActivityService {
 				week.judgment() == null ? null : WeekJudgmentResponse.from(week.judgment()));
 	}
 
-	// 캐시는 지난 주 월요일부터만 덮는다. 그보다 오래된 주는 잔디를 알 수 없는 것으로 본다 (0칸으로 오해하지 않게)
+	// 캐시는 기본 시작일(1년 전 다음 날)부터만 덮는다. 그보다 오래된 주는 잔디를 알 수 없는 것으로 본다 (0칸으로 오해하지 않게)
 	private GrassSnapshot grassOfWeek(Week week) {
 		return grassCacheService.findLatest(week.memberId())
 				.filter(s -> !s.from().isAfter(week.weekStart()))

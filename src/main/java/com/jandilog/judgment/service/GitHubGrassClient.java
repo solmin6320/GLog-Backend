@@ -37,8 +37,8 @@ import com.jandilog.judgment.dto.GrassDay;
 public class GitHubGrassClient implements GrassClient {
 
 	private static final Logger log = LoggerFactory.getLogger(GitHubGrassClient.class);
-	// GitHub 쿼리 비용을 묶어 두는 상한. 평소 14일, 서버가 오래 꺼졌던 뒤 늦은 판정도 이 안에 든다
-	static final int MAX_DAYS = 62;
+	// contributionsCollection의 from~to 한도(1년). 프로필 잔디가 1년치라 윤년까지 366일
+	static final int MAX_DAYS = 366;
 	private static final String NOT_FOUND = "NOT_FOUND";
 
 	private final RestClient restClient;

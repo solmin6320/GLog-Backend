@@ -1,13 +1,11 @@
 package com.jandilog.judgment.service;
 
 import java.time.Clock;
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -63,9 +61,10 @@ public class GrassCacheService {
 		return KEY_PREFIX + memberId + ":" + date;
 	}
 
-	// 기본 조회 구간의 시작일: 지난 주 월요일. 이번 주와 지난 주를 한 번에 덮어서 월요일 판정과 이번 주 화면이 같은 캐시를 쓴다
+	// 기본 조회 구간의 시작일: 1년 전 다음 날. 프로필 잔디(GitHub처럼 1년치, 2026-10-30 사용자 지시)와
+	// 월요일 판정·이번 주 화면이 같은 캐시를 쓴다. GitHub 조회 한도(1년) 안이다
 	public static LocalDate defaultFrom(LocalDate today) {
-		return today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+		return today.minusYears(1).plusDays(1);
 	}
 
 	// 화면용. 캐시만 읽는다: 오늘 것, 없으면 어제 것(갱신 직전까지 비지 않게 TTL이 26시간이다)
