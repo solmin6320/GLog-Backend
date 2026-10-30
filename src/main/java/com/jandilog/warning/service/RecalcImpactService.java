@@ -34,7 +34,15 @@ public class RecalcImpactService {
 	// 그 주 판정을 target으로 바꿨다고 가정한 영향 (정정 · 소급 면제)
 	@Transactional(readOnly = true)
 	public RecalcImpact ofStatusChange(long memberId, LocalDate weekStart, JudgmentStatus target) {
-		WarningRecalcPreview preview = recalculationService.preview(memberId, Map.of(weekStart, target));
+		return ofStatusChange(memberId, weekStart, target, false);
+	}
+
+	// newWarningDeleted: 미달로 바꿀 때 새로 생길 경고가 삭제 표시로 만들어지는가 (그 사이 추방·팀 삭제)
+	@Transactional(readOnly = true)
+	public RecalcImpact ofStatusChange(long memberId, LocalDate weekStart, JudgmentStatus target,
+			boolean newWarningDeleted) {
+		WarningRecalcPreview preview = recalculationService.preview(memberId, Map.of(weekStart, target), Set.of(),
+				newWarningDeleted ? Set.of(weekStart) : Set.of());
 		return summarize(memberId, weekStart, preview);
 	}
 
