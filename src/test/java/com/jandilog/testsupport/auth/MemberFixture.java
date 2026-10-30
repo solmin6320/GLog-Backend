@@ -1,7 +1,6 @@
 package com.jandilog.testsupport.auth;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -98,7 +97,7 @@ public class MemberFixture {
 		jdbc.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into member (github_id, github_login, nickname, status, role, created_at, approved_at)"
-							+ " values (?, ?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+							+ " values (?, ?, ?, ?, ?, ?, ?)", new String[] {"id"});
 			ps.setLong(1, githubId);
 			ps.setString(2, githubLogin);
 			ps.setString(3, nickname);

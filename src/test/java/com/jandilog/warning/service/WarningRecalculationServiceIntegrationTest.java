@@ -39,7 +39,7 @@ import com.jandilog.warning.domain.WarningRecalcPreview;
 import com.jandilog.warning.domain.WarningRecalcResult;
 import com.jandilog.warning.domain.WarningRecalculator;
 
-// 판정 이력·경고·이행 기준선을 DB에서 읽어 처음부터 다시 계산한다 (DB명세서 4-3). 공유 compose MariaDB를 쓴다
+// 판정 이력·경고·이행 기준선을 DB에서 읽어 처음부터 다시 계산한다 (DB명세서 4-3). 공유 compose PostgreSQL를 쓴다
 class WarningRecalculationServiceIntegrationTest extends WarningIntegrationTest {
 
 	@Test
@@ -414,11 +414,11 @@ class WarningRecalculationServiceIntegrationTest extends WarningIntegrationTest 
 
 	@Test
 	void 경고_수와_연속_통과를_저장하는_컬럼이나_캐시_테이블이_없다() {
-		assertThat(fixture.count("select count(*) from information_schema.columns where table_schema = database()"
+		assertThat(fixture.count("select count(*) from information_schema.columns where table_schema = current_schema()"
 				+ " and table_name in ('member', 'weekly_judgment', 'warning', 'warning_team', 'penalty_fulfillment')"
 				+ " and (column_name like '%warning_count%' or column_name like '%streak%'"
 				+ " or column_name like '%consecutive%')")).isZero();
-		assertThat(fixture.count("select count(*) from information_schema.tables where table_schema = database()"
+		assertThat(fixture.count("select count(*) from information_schema.tables where table_schema = current_schema()"
 				+ " and (table_name like '%warning_state%' or table_name like '%streak%')")).isZero();
 	}
 
@@ -651,7 +651,7 @@ class WarningRecalculationServiceIntegrationTest extends WarningIntegrationTest 
 		assertThat(recalculation.calculate(member)).isEqualTo(inside);
 	}
 
-	// ---- 회원 단위 락 (Q-08: MariaDB 회원 행 비관적 락) ----
+	// ---- 회원 단위 락 (Q-08: PostgreSQL 회원 행 비관적 락) ----
 
 	@Test
 	void 회원_락은_이미_열린_트랜잭션_안에서만_잡을_수_있다() {

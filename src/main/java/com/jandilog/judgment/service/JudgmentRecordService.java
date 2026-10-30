@@ -26,7 +26,7 @@ import com.jandilog.warning.repository.WarningRepository;
 import com.jandilog.warning.repository.WarningTeamRepository;
 import com.jandilog.warning.service.WarningRecalculationService;
 
-// 판정 계산 결과를 MariaDB에 저장한다 (DB명세서 4-2 1·4·5단계). 월요일 스케줄러·소속 스냅샷 조회는 2단계에서 이 위에 얹는다.
+// 판정 계산 결과를 PostgreSQL에 저장한다 (DB명세서 4-2 1·4·5단계). 월요일 스케줄러·소속 스냅샷 조회는 2단계에서 이 위에 얹는다.
 // 회원 락을 잡고 한 트랜잭션으로 weekly_judgment, judgment_team, judgment_day, 미달이면 warning + warning_team까지 쓴다.
 // (member_id, week_start) UNIQUE 기반 멱등: 확정된 주는 건드리지 않고, 보류 주만 같은 행을 갱신한다 (E-35)
 @Service

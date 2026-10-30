@@ -11,7 +11,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.jandilog.testsupport.auth.MutableClock;
 
-// 로컬 compose DB(MariaDB·Redis)를 쓰는 판정 통합 테스트 공통 바탕. 시계는 고정 가능, GitHub는 가짜
+// 로컬 compose DB(PostgreSQL·Redis)를 쓰는 판정 통합 테스트 공통 바탕. 시계는 고정 가능, GitHub는 가짜
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(JudgmentTestConfig.class)

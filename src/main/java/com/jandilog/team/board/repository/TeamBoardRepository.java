@@ -16,7 +16,7 @@ import com.jandilog.judgment.domain.WeeklyJudgment;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
-// 팀 현황판이 읽는 MariaDB 묶음 조회. 회원 id·팀 id 목록으로 한 번에 읽어 팀·팀원 수만큼 쿼리가 늘지 않게 한다.
+// 팀 현황판이 읽는 PostgreSQL 묶음 조회. 회원 id·팀 id 목록으로 한 번에 읽어 팀·팀원 수만큼 쿼리가 늘지 않게 한다.
 // 소속·글 색인·판정·경고는 다른 도메인 테이블이라 읽기 전용으로만 쓴다
 @Repository
 @Transactional(readOnly = true)

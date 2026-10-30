@@ -16,7 +16,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
 // 판정 입력 조회 전용. 소속·글 색인·면제 테이블은 다른 도메인이 소유하므로 엔티티를 중복 매핑하지 않고 읽기 SQL만 둔다.
-// 판정은 MariaDB만 읽는다(Mongo 접근 금지, DB명세서 4-2)
+// 판정은 PostgreSQL만 읽는다(Mongo 접근 금지, DB명세서 4-2)
 @Repository
 @Transactional(readOnly = true)
 public class JudgmentSourceRepository {

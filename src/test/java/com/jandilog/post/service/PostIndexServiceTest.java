@@ -27,7 +27,7 @@ import com.jandilog.post.domain.PostType;
 import com.jandilog.post.repository.PostIndexRepository;
 import com.jandilog.testsupport.auth.MutableClock;
 
-// MariaDB post_index 쓰기: 기록글 여부·작성일·삭제 시각 동기화 (DB명세서 1-5, Q-11)
+// PostgreSQL post_index 쓰기: 기록글 여부·작성일·삭제 시각 동기화 (DB명세서 1-5, Q-11)
 @ExtendWith(MockitoExtension.class)
 class PostIndexServiceTest {
 

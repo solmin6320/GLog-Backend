@@ -21,6 +21,8 @@ class ProdProfileValidatorTest {
 	private static final String REDIS_SSL_KEY = "spring.data.redis.ssl.enabled";
 	private static final String MONGO_URI_KEY = "spring.data.mongodb.uri";
 	private static final String DB_PASSWORD_KEY = "spring.datasource.password";
+	private static final String DB_URL_KEY = "spring.datasource.url";
+	private static final String DB_URL = "jdbc:postgresql://ep-test.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require";
 	private static final String HTTPS_REDIRECT ="https://api.example.com/login/oauth2/code/{registrationId}";
 	private static final String SECRET = "k3Jx9Qv7mW2pL8nR4tY6uB1cD5eF0gHaZsXoViNqMlPwKjTy";
 	// 아래 두 값은 테스트 전용이고 실제 비밀값이 아니다
@@ -46,6 +48,7 @@ class ProdProfileValidatorTest {
 		env.setProperty(REDIS_SSL_KEY, "true");
 		env.setProperty(MONGO_URI_KEY, MONGO_URI);
 		env.setProperty(DB_PASSWORD_KEY, DB_PASSWORD);
+		env.setProperty(DB_URL_KEY, DB_URL);
 		return env;
 	}
 
@@ -122,7 +125,7 @@ class ProdProfileValidatorTest {
 		// prod면 http 주소에서 컨텍스트가 뜨지 않는다
 		base.withInitializer(context -> context.getEnvironment().setActiveProfiles("prod"))
 				.withPropertyValues(REDIRECT_KEY + "=" + HTTPS_REDIRECT, REDIS_SSL_KEY + "=true",
-						MONGO_URI_KEY + "=" + MONGO_URI, DB_PASSWORD_KEY + "=" + DB_PASSWORD)
+						MONGO_URI_KEY + "=" + MONGO_URI, DB_PASSWORD_KEY + "=" + DB_PASSWORD, DB_URL_KEY + "=" + DB_URL)
 				.run(context -> {
 					assertThat(context).hasFailed();
 					assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalStateException.class);
@@ -134,7 +137,7 @@ class ProdProfileValidatorTest {
 		prodRunner("https://jandi.example.com", true)
 				.withInitializer(context -> context.getEnvironment().setActiveProfiles("prod"))
 				.withPropertyValues(REDIRECT_KEY + "=" + HTTPS_REDIRECT, REDIS_SSL_KEY + "=true",
-						MONGO_URI_KEY + "=" + MONGO_URI, DB_PASSWORD_KEY + "=" + DB_PASSWORD)
+						MONGO_URI_KEY + "=" + MONGO_URI, DB_PASSWORD_KEY + "=" + DB_PASSWORD, DB_URL_KEY + "=" + DB_URL)
 				.run(context -> assertThat(context).hasNotFailed().hasSingleBean(ProdProfileValidator.class));
 	}
 
@@ -143,7 +146,7 @@ class ProdProfileValidatorTest {
 		prodRunner("https://jandi.example.com", true)
 				.withInitializer(context -> context.getEnvironment().setActiveProfiles("prod"))
 				.withPropertyValues(REDIRECT_KEY + "=" + HTTPS_REDIRECT, REDIS_SSL_KEY + "=false",
-						MONGO_URI_KEY + "=" + MONGO_URI, DB_PASSWORD_KEY + "=" + DB_PASSWORD)
+						MONGO_URI_KEY + "=" + MONGO_URI, DB_PASSWORD_KEY + "=" + DB_PASSWORD, DB_URL_KEY + "=" + DB_URL)
 				.run(context -> {
 					assertThat(context).hasFailed();
 					assertThat(context.getStartupFailure()).rootCause().isInstanceOf(IllegalStateException.class)
@@ -155,7 +158,7 @@ class ProdProfileValidatorTest {
 	void 로컬_프로필에서는_개발_기본값이어도_새_검증이_돌지_않는다() {
 		prodRunner("http://localhost:5173", false)
 				.withPropertyValues(REDIS_SSL_KEY + "=false", MONGO_URI_KEY + "=mongodb://localhost:27017/jandilog",
-						DB_PASSWORD_KEY + "=jandilog")
+						DB_PASSWORD_KEY + "=jandilog", DB_URL_KEY + "=" + DB_URL)
 				.run(context -> {
 					assertThat(context).hasNotFailed();
 					assertThat(context).doesNotHaveBean(ProdProfileValidator.class);
@@ -180,6 +183,7 @@ class ProdProfileValidatorTest {
 		env.setProperty(REDIRECT_KEY, HTTPS_REDIRECT);
 		env.setProperty(MONGO_URI_KEY, MONGO_URI);
 		env.setProperty(DB_PASSWORD_KEY, DB_PASSWORD);
+		env.setProperty(DB_URL_KEY, DB_URL);
 
 		assertThatThrownBy(() -> validate(env)).isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("REDIS_SSL");
@@ -220,6 +224,7 @@ class ProdProfileValidatorTest {
 		env.setProperty(REDIRECT_KEY, HTTPS_REDIRECT);
 		env.setProperty(REDIS_SSL_KEY, "true");
 		env.setProperty(DB_PASSWORD_KEY, DB_PASSWORD);
+		env.setProperty(DB_URL_KEY, DB_URL);
 
 		assertThatThrownBy(() -> validate(env)).isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("MONGODB_URI");
@@ -247,6 +252,7 @@ class ProdProfileValidatorTest {
 	void DB_비밀번호가_비었거나_개발_기본값이거나_짧으면_기동을_막는다(String password) {
 		MockEnvironment env = env(HTTPS_REDIRECT);
 		env.setProperty(DB_PASSWORD_KEY, password);
+		env.setProperty(DB_URL_KEY, DB_URL);
 
 		// 메시지에 비밀번호가 실리지 않는다
 		assertThatThrownBy(() -> validate(env)).isInstanceOf(IllegalStateException.class)
@@ -283,6 +289,7 @@ class ProdProfileValidatorTest {
 		env.setProperty(REDIS_SSL_KEY, "false");
 		env.setProperty(MONGO_URI_KEY, "mongodb://app:Mongo-Pw-7731@db.example.com:27017/jandilog");
 		env.setProperty(DB_PASSWORD_KEY, "shortpw");
+		env.setProperty(DB_URL_KEY, DB_URL);
 
 		// Redis → Mongo → DB 순으로 막히며, 어느 단계의 메시지에도 값이 없다
 		assertThatThrownBy(() -> validate(env)).hasMessageNotContaining("Mongo-Pw-7731")
@@ -293,6 +300,26 @@ class ProdProfileValidatorTest {
 		env.setProperty(MONGO_URI_KEY, MONGO_URI);
 		assertThatThrownBy(() -> validate(env)).hasMessageContaining("DB_PASSWORD")
 				.hasMessageNotContaining("shortpw");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"jdbc:postgresql://db.example.com:5432/app", "jdbc:postgresql://db.example.com:5432/app?sslmode=disable",
+			"jdbc:postgresql://db.example.com:5432/app?sslmode=prefer"})
+	void DB_접속이_TLS_필수가_아니면_기동을_막는다(String url) {
+		MockEnvironment env = env(HTTPS_REDIRECT);
+		env.setProperty(DB_URL_KEY, url);
+
+		assertThatThrownBy(() -> validate(env)).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("DB_SSL_MODE").hasMessageNotContaining("db.example.com");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"require", "verify-ca", "verify-full"})
+	void DB_접속이_require_이상이면_통과한다(String mode) {
+		MockEnvironment env = env(HTTPS_REDIRECT);
+		env.setProperty(DB_URL_KEY, "jdbc:postgresql://db.example.com:5432/app?sslmode=" + mode);
+
+		assertThatCode(() -> validate(env)).doesNotThrowAnyException();
 	}
 
 }

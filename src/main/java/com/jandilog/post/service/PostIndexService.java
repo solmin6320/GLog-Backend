@@ -10,7 +10,7 @@ import com.jandilog.post.domain.Post;
 import com.jandilog.post.domain.PostIndex;
 import com.jandilog.post.repository.PostIndexRepository;
 
-// MariaDB post_index 쓰기. 호출하는 쪽이 MongoDB를 먼저 쓴 뒤 부른다 (DB명세서 4-1)
+// PostgreSQL post_index 쓰기. 호출하는 쪽이 MongoDB를 먼저 쓴 뒤 부른다 (DB명세서 4-1)
 @Service
 public class PostIndexService {
 

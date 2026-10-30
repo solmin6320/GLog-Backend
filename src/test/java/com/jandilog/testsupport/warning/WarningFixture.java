@@ -1,7 +1,6 @@
 package com.jandilog.testsupport.warning;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -222,7 +221,7 @@ public class WarningFixture {
 	private long insertReturningId(String sql, Object... args) {
 		var keys = new GeneratedKeyHolder();
 		jdbc.update(connection -> {
-			PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+			PreparedStatement ps = connection.prepareStatement(sql, new String[] {"id"});
 			for (int i = 0; i < args.length; i++) {
 				ps.setObject(i + 1, args[i]);
 			}

@@ -1,7 +1,6 @@
 package com.jandilog.team.support;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,7 +35,7 @@ public final class TeamWarningFixture {
 		jdbc.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into warning (member_id, week_start, created_at) values (?, ?, ?)",
-					Statement.RETURN_GENERATED_KEYS);
+					new String[] {"id"});
 			ps.setLong(1, memberId);
 			ps.setObject(2, weekStart);
 			ps.setObject(3, weekStart.plusDays(7).atTime(6, 0));

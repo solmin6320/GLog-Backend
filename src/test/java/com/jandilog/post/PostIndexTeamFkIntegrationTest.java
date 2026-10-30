@@ -31,9 +31,8 @@ class PostIndexTeamFkIntegrationTest extends BoardIntegrationTest {
 	@Test
 	void post_index에_team_FK가_걸려_있다() {
 		List<String> referenced = jdbc.queryForList(
-				"select referenced_table_name from information_schema.referential_constraints "
-						+ "where constraint_schema = database() and table_name = 'post_index' "
-						+ "and constraint_name = 'fk_pi_team'",
+				"select confrelid::regclass::text from pg_constraint "
+						+ "where conrelid = 'post_index'::regclass and conname = 'fk_pi_team' and contype = 'f'",
 				String.class);
 
 		assertThat(referenced).containsExactly("team");

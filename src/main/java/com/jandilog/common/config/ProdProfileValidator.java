@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 // prod 프로필 기동 검증. 잘못되면 컨텍스트가 뜨지 않는다.
 // 로그인 복귀 주소·GitHub 콜백 주소·잔디 조회 주소는 https만, 세션 쿠키는 Secure 고정,
-// Redis·MongoDB는 TLS 필수, DB 비밀번호는 개발 기본값·빈 값·짧은 값 거부. 오류 메시지에는 비밀값을 넣지 않는다
+// DB·Redis·MongoDB는 TLS 필수, DB 비밀번호는 개발 기본값·빈 값·짧은 값 거부. 오류 메시지에는 비밀값을 넣지 않는다
 @Component
 @Profile("prod")
 public class ProdProfileValidator {
@@ -19,6 +19,7 @@ public class ProdProfileValidator {
 	private static final String REDIS_SSL_KEY = "spring.data.redis.ssl.enabled";
 	private static final String MONGO_URI_KEY = "spring.data.mongodb.uri";
 	private static final String DB_PASSWORD_KEY = "spring.datasource.password";
+	private static final String DB_URL_KEY = "spring.datasource.url";
 
 	// 로컬 docker-compose 기본 비밀번호
 	private static final String DEV_DB_PASSWORD = "jandilog";
@@ -39,6 +40,7 @@ public class ProdProfileValidator {
 		requireRedisTls(environment.getProperty(REDIS_SSL_KEY));
 		requireMongoTls(environment.getProperty(MONGO_URI_KEY));
 		requireStrongDbPassword(environment.getProperty(DB_PASSWORD_KEY));
+		requireDbTls(environment.getProperty(DB_URL_KEY));
 	}
 
 	private static void requireHttps(String name, String url) {
@@ -90,6 +92,15 @@ public class ProdProfileValidator {
 			}
 		}
 		return result;
+	}
+
+	// PostgreSQL 접속은 sslmode가 require·verify-ca·verify-full이어야 한다. 주소는 오류 메시지에 넣지 않는다
+	private static void requireDbTls(String url) {
+		String lower = url == null ? "" : url.toLowerCase(Locale.ROOT);
+		if (!lower.contains("sslmode=require") && !lower.contains("sslmode=verify-ca")
+				&& !lower.contains("sslmode=verify-full")) {
+			throw new IllegalStateException("DB_SSL_MODE는 운영에서 require 이상이어야 해요");
+		}
 	}
 
 	private static void requireStrongDbPassword(String password) {

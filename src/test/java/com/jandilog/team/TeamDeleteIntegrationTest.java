@@ -154,7 +154,7 @@ class TeamDeleteIntegrationTest extends TeamIntegrationTest {
 			// Mongo
 			assertThat(mongoDocument(linked)).as("글이 남아 있다").isNotNull();
 			assertThat(mongoDocument(linked).get("teamId")).as("Mongo posts.teamId").isNull();
-			// MariaDB
+			// PostgreSQL
 			assertThat(indexRow(linked).get("team_id")).as("post_index.team_id").isNull();
 		}
 		// 삭제 표시는 그대로, 글 자체는 지워지지 않는다

@@ -52,7 +52,7 @@ class ProfileConfigTest {
 
 	private static Map<String, String> allProdVariables() {
 		return Map.ofEntries(
-				Map.entry("DB_HOST", "db.internal"), Map.entry("DB_PORT", "3306"), Map.entry("DB_NAME", "jandilog"),
+				Map.entry("DB_HOST", "db.internal"), Map.entry("DB_PORT", "5432"), Map.entry("DB_SSL_MODE", "require"), Map.entry("DB_NAME", "jandilog"),
 				Map.entry("DB_USERNAME", "app"), Map.entry("DB_PASSWORD", "db-pass"),
 				Map.entry("MONGODB_URI", "mongodb+srv://atlas.example/jandilog"),
 				Map.entry("REDIS_HOST", "redis.example"), Map.entry("REDIS_PORT", "6379"),
@@ -75,7 +75,7 @@ class ProfileConfigTest {
 	void 기본_프로필의_로컬_접속_기본값은_그대로다() {
 		MockEnvironment env = environment(false, Map.of());
 
-		assertThat(env.getProperty("spring.datasource.url")).startsWith("jdbc:mariadb://localhost:3306/jandilog");
+		assertThat(env.getProperty("spring.datasource.url")).isEqualTo("jdbc:postgresql://localhost:5432/jandilog?sslmode=disable");
 		assertThat(env.getProperty("spring.datasource.username")).isEqualTo("jandilog");
 		assertThat(env.getProperty("spring.datasource.password")).isEqualTo("jandilog");
 		assertThat(env.getProperty("spring.data.redis.host")).isEqualTo("localhost");
@@ -187,6 +187,7 @@ class ProfileConfigTest {
 	@CsvSource({
 			"spring.datasource.url, DB_HOST",
 			"spring.datasource.url, DB_PORT",
+			"spring.datasource.url, DB_SSL_MODE",
 			"spring.datasource.url, DB_NAME",
 			"spring.datasource.username, DB_USERNAME",
 			"spring.datasource.password, DB_PASSWORD",
@@ -210,7 +211,7 @@ class ProfileConfigTest {
 	void prod에서_환경변수를_모두_주면_그_값을_쓴다() {
 		MockEnvironment env = environment(true, allProdVariables());
 
-		assertThat(env.getProperty("spring.datasource.url")).startsWith("jdbc:mariadb://db.internal:3306/jandilog?");
+		assertThat(env.getProperty("spring.datasource.url")).isEqualTo("jdbc:postgresql://db.internal:5432/jandilog?sslmode=require");
 		assertThat(env.getProperty("spring.datasource.password")).isEqualTo("db-pass");
 		assertThat(env.getProperty("spring.data.mongodb.uri")).isEqualTo("mongodb+srv://atlas.example/jandilog");
 		assertThat(env.getProperty("spring.data.redis.host")).isEqualTo("redis.example");
@@ -264,20 +265,21 @@ class ProfileConfigTest {
 	}
 
 	@Test
-	void DB_풀_타임아웃_기본값은_10초_연결_10초_응답_60초다() {
+	void DB_풀_타임아웃_기본값은_20초_연결_15초_응답_60초다() {
 		for (MockEnvironment env : List.of(environment(false, Map.of()), environment(true, allProdVariables()))) {
 			HikariDataSource hikari = bindHikari(env);
 
-			assertThat(hikari.getConnectionTimeout()).isEqualTo(10_000);
-			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("10000");
-			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("60000");
+			// PostgreSQL 드라이버의 connectTimeout·socketTimeout은 초 단위
+			assertThat(hikari.getConnectionTimeout()).isEqualTo(20_000);
+			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("15");
+			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("60");
 		}
 	}
 
 	@Test
 	void DB_풀_타임아웃은_환경변수로_바꿀_수_있다() {
-		Map<String, String> variables = Map.of("DB_POOL_WAIT_TIMEOUT_MS", "3000", "DB_CONNECT_TIMEOUT_MS", "4000",
-				"DB_SOCKET_TIMEOUT_MS", "5000");
+		Map<String, String> variables = Map.of("DB_POOL_WAIT_TIMEOUT_MS", "3000", "DB_CONNECT_TIMEOUT_SECONDS", "4",
+				"DB_SOCKET_TIMEOUT_SECONDS", "5");
 		Map<String, String> prod = new HashMap<>(allProdVariables());
 		prod.putAll(variables);
 
@@ -285,17 +287,17 @@ class ProfileConfigTest {
 			HikariDataSource hikari = bindHikari(env);
 
 			assertThat(hikari.getConnectionTimeout()).isEqualTo(3_000);
-			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("4000");
-			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("5000");
+			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("4");
+			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("5");
 		}
 	}
 
 	@Test
-	void JDBC_응답_상한은_InnoDB_락_대기_기본값_50초보다_길다() {
-		long socketTimeout = Long.parseLong(
-				bindHikari(environment(false, Map.of())).getDataSourceProperties().getProperty("socketTimeout"));
+	void Neon이_깨어나는_시간보다_연결_상한이_길다() {
+		long connectTimeout = Long.parseLong(
+				bindHikari(environment(false, Map.of())).getDataSourceProperties().getProperty("connectTimeout"));
 
-		assertThat(socketTimeout).isGreaterThan(50_000);
+		assertThat(connectTimeout).isGreaterThanOrEqualTo(10);
 	}
 
 	@Test

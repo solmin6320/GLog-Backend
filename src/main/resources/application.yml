@@ -16,18 +16,18 @@ spring:
             # GitHub OAuth App에 등록한 콜백 주소. 백엔드 공개 주소 기준 한 곳
             redirect-uri: ${BACKEND_BASE_URL:http://localhost:8080}/login/oauth2/code/{registrationId}
 
-  # MariaDB (utf8mb4, DB명세서 1-0). 접속 정보는 환경변수, 기본값은 로컬 docker-compose 값
+  # PostgreSQL (운영 Neon). 접속 정보는 환경변수, 기본값은 로컬 docker-compose 값. 운영 Neon은 DB_SSL_MODE=require
   datasource:
-    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:jandilog}?connectionCollation=utf8mb4_general_ci
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:jandilog}?sslmode=${DB_SSL_MODE:disable}
     username: ${DB_USERNAME:jandilog}
     password: ${DB_PASSWORD:jandilog}
-    # 풀 대기·연결·쿼리 응답 상한(밀리초). DB가 멈춰도 요청이 무한정 쌓이지 않게 한다. 환경변수로 덮어쓴다
-    # socketTimeout은 InnoDB 락 대기 기본값(50초)보다 길게 둬서 락 대기 오류는 DB가 먼저 낸다
+    # 풀 대기(밀리초)·연결·쿼리 응답(초) 상한. DB가 멈춰도 요청이 무한정 쌓이지 않게 한다. 환경변수로 덮어쓴다
+    # Neon 무료 요금제는 쉬다가 깨어나는 데 몇 초 걸려서 연결 상한을 넉넉히 둔다
     hikari:
-      connection-timeout: ${DB_POOL_WAIT_TIMEOUT_MS:10000}
+      connection-timeout: ${DB_POOL_WAIT_TIMEOUT_MS:20000}
       data-source-properties:
-        connectTimeout: ${DB_CONNECT_TIMEOUT_MS:10000}
-        socketTimeout: ${DB_SOCKET_TIMEOUT_MS:60000}
+        connectTimeout: ${DB_CONNECT_TIMEOUT_SECONDS:15}
+        socketTimeout: ${DB_SOCKET_TIMEOUT_SECONDS:60}
 
   # 스키마는 Flyway만 관리 (기능명세서 10장). 운영 clean 금지
   flyway:
@@ -69,7 +69,8 @@ spring:
 # OAuth 인증 요청을 잇는 동안에만 세션을 쓴다. 그 뒤 세션은 버린다
 server:
   # .env의 SERVER_PORT로 포트를 바꾼다 (다른 프로그램이 8080을 쓸 때). 바꾸면 BACKEND_BASE_URL도 같이 맞춘다
-  port: ${SERVER_PORT:8080}
+  # Render는 PORT로 포트를 정해 준다
+  port: ${SERVER_PORT:${PORT:8080}}
   servlet:
     session:
       timeout: 10m
