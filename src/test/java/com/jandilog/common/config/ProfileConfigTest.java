@@ -135,9 +135,10 @@ class ProfileConfigTest {
 	// ----- 첫 관리자 지정(ADMIN_GITHUB_IDS) -----
 
 	@Test
-	void 로컬_설정은_실행_디렉터리의_env를_없어도_되는_파일로_읽는다() {
-		assertThat(environment(false, Map.of()).getProperty("spring.config.import"))
-				.isEqualTo("optional:file:.env[.properties]");
+	void 로컬_설정은_실행_디렉터리의_env를_없어도_되는_파일로_읽고_test_프로필은_읽지_않는다() {
+		MockEnvironment env = environment(false, Map.of());
+		assertThat(env.getProperty("spring.config.import")).isEqualTo("optional:file:.env[.properties]");
+		assertThat(env.getProperty("spring.config.activate.on-profile")).isEqualTo("!test");
 	}
 
 	@Test
