@@ -225,7 +225,7 @@ abstract class TeamBoardTestBase extends AuthIntegrationTest {
 
 	// ----- 잔디 캐시 -----
 
-	// 새벽 갱신이 채운 것처럼 지난 주 월요일부터 today까지를 덮는 today자 캐시를 Redis에 심는다. grassDays에 든 날만 잔디 1칸
+	// 새벽 갱신이 채운 것처럼 기본 시작일(1년 전 다음 날)부터 today까지를 덮는 today자 캐시를 Redis에 심는다. grassDays에 든 날만 잔디 1칸
 	protected void seedGrass(long memberId, LocalDate today, Set<LocalDate> grassDays) {
 		seedGrass(memberId, today, GrassCacheService.defaultFrom(today), today, today.atTime(6, 0), grassDays);
 	}

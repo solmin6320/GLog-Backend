@@ -195,9 +195,9 @@ class GitHubGrassClientHttpTest {
 	// ---------- 구간 상한 ----------
 
 	@Test
-	void 구간이_62일이면_허용하고_한_번에_조회한다() {
-		LocalDate to = FROM.plusDays(61);
-		int[] totals = new int[62];
+	void 구간이_366일이면_허용하고_한_번에_조회한다() {
+		LocalDate to = FROM.plusDays(365);
+		int[] totals = new int[366];
 		for (int i = 0; i < totals.length; i++) {
 			totals[i] = i % 3;
 		}
@@ -205,14 +205,14 @@ class GitHubGrassClientHttpTest {
 
 		List<GrassDay> days = client().fetchDailyContributions("octocat", FROM, to);
 
-		assertThat(days).hasSize(62);
-		assertThat(days.get(61).date()).isEqualTo(to);
+		assertThat(days).hasSize(366);
+		assertThat(days.get(365).date()).isEqualTo(to);
 		assertThat(requests).hasSize(1);
 	}
 
 	@Test
-	void 구간이_63일이면_요청_없이_거부한다() {
-		Throwable thrown = catchThrowable(() -> client().fetchDailyContributions("octocat", FROM, FROM.plusDays(62)));
+	void 구간이_367일이면_요청_없이_거부한다() {
+		Throwable thrown = catchThrowable(() -> client().fetchDailyContributions("octocat", FROM, FROM.plusDays(366)));
 
 		assertThat(thrown).isInstanceOf(IllegalArgumentException.class);
 		assertThat(requests).isEmpty();

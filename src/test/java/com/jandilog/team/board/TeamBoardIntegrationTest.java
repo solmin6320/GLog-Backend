@@ -253,7 +253,7 @@ class TeamBoardIntegrationTest extends AuthIntegrationTest {
 		return ids;
 	}
 
-	// 새벽 갱신이 채운 것처럼 지난 주 월요일부터 오늘까지를 덮는 오늘자 캐시를 Redis에 심는다
+	// 새벽 갱신이 채운 것처럼 기본 시작일부터 오늘까지를 덮는 오늘자 캐시를 Redis에 심는다
 	private void seedGrass(long memberId, Map<LocalDate, Integer> counts) throws JsonProcessingException {
 		LocalDate from = LocalDate.of(2026, 9, 28);
 		List<Map<String, Object>> days = new ArrayList<>();

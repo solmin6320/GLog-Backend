@@ -42,12 +42,12 @@ import com.jandilog.testsupport.judgment.FakeGrassClient;
 import com.jandilog.testsupport.judgment.JudgmentIntegrationTest;
 
 // 잔디 캐시(Redis grass:{memberId}:{yyyy-MM-dd}, TTL 26시간) + 가짜 GitHub 클라이언트. 회원당 하루 1회 호출이 핵심이다 (기능명세서 5장, DB명세서 2장)
-// 시계는 2026-10-05(월) 07:00 KST. 기본 조회 구간은 지난 주 월요일(09-28)부터 오늘까지
+// 시계는 2026-10-05(월) 07:00 KST. 기본 조회 구간은 1년 전 다음 날(2025-10-06)부터 오늘까지
 class GrassCacheServiceTest extends JudgmentIntegrationTest {
 
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 	private static final LocalDate TODAY = LocalDate.of(2026, 10, 5);
-	private static final LocalDate DEFAULT_FROM = LocalDate.of(2026, 9, 28);
+	private static final LocalDate DEFAULT_FROM = LocalDate.of(2025, 10, 6);
 	private static final String LOGIN = "octocat";
 
 	@Autowired
@@ -88,13 +88,13 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 	}
 
 	@Test
-	void 조회_구간은_지난_주_월요일부터_오늘까지_8일이고_갱신_기준_시각이_붙는다() {
+	void 조회_구간은_1년_전_다음_날부터_오늘까지_365일이고_갱신_기준_시각이_붙는다() {
 		GrassSnapshot snapshot = cache.getOrFetch(memberId, LOGIN);
 
 		assertThat(snapshot.memberId()).isEqualTo(memberId);
 		assertThat(snapshot.from()).isEqualTo(DEFAULT_FROM);
 		assertThat(snapshot.to()).isEqualTo(TODAY);
-		assertThat(snapshot.days()).hasSize(8);
+		assertThat(snapshot.days()).hasSize(365);
 		assertThat(snapshot.fetchedAt()).isEqualTo(LocalDateTime.of(2026, 10, 5, 7, 0));
 	}
 
@@ -210,11 +210,11 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 		JsonNode node = objectMapper.readTree(json);
 
 		assertThat(node.path("memberId").asLong()).isEqualTo(memberId);
-		assertThat(node.path("from").asText()).isEqualTo("2026-09-28");
+		assertThat(node.path("from").asText()).isEqualTo("2025-10-06");
 		assertThat(node.path("to").asText()).isEqualTo("2026-10-05");
 		assertThat(node.path("fetchedAt").asText()).isEqualTo("2026-10-05T08:30");
-		assertThat(node.path("days")).hasSize(8);
-		assertThat(node.path("days").get(0).path("date").asText()).isEqualTo("2026-09-28");
+		assertThat(node.path("days")).hasSize(365);
+		assertThat(node.path("days").get(0).path("date").asText()).isEqualTo("2025-10-06");
 		assertThat(node.path("days").get(0).path("count").asInt()).isEqualTo(1);
 		assertThat(json).doesNotContain(LOGIN);
 	}
@@ -353,7 +353,7 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 
 		GrassSnapshot first = service.getOrFetch(memberId, LOGIN);
 
-		assertThat(first.days()).hasSize(8);
+		assertThat(first.days()).hasSize(365);
 		assertThat(first.from()).isEqualTo(DEFAULT_FROM);
 		assertThatCode(() -> service.refresh(memberId, LOGIN)).doesNotThrowAnyException();
 		assertThat(fakeGrass.callCount()).isEqualTo(2);
@@ -366,14 +366,14 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 	@Test
 	void 필요한_구간을_덮지_못하면_getOrFetchCovering이_더_넓게_다시_부른다() {
 		cache.getOrFetch(memberId, LOGIN);
-		LocalDate requiredFrom = LocalDate.of(2026, 9, 14);
+		LocalDate requiredFrom = DEFAULT_FROM.minusDays(7);
 
 		GrassSnapshot wider = cache.getOrFetchCovering(memberId, LOGIN, requiredFrom);
 
 		assertThat(fakeGrass.callCount()).isEqualTo(2);
 		assertThat(wider.from()).isEqualTo(requiredFrom);
 		assertThat(wider.to()).isEqualTo(TODAY);
-		assertThat(wider.days()).hasSize(22);
+		assertThat(wider.days()).hasSize(372);
 		assertThat(fakeGrass.calls().get(1)).isEqualTo(new FakeGrassClient.Call(LOGIN, requiredFrom, TODAY));
 		assertThat(cache.find(memberId, TODAY)).contains(wider);
 	}
@@ -381,10 +381,10 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 	@Test
 	void 넓힌_캐시는_그_구간과_더_좁은_구간_요청에_다시_부르지_않는다() {
 		cache.getOrFetch(memberId, LOGIN);
-		cache.getOrFetchCovering(memberId, LOGIN, LocalDate.of(2026, 9, 14));
+		cache.getOrFetchCovering(memberId, LOGIN, DEFAULT_FROM.minusDays(7));
 
-		cache.getOrFetchCovering(memberId, LOGIN, LocalDate.of(2026, 9, 14));
-		cache.getOrFetchCovering(memberId, LOGIN, LocalDate.of(2026, 9, 28));
+		cache.getOrFetchCovering(memberId, LOGIN, DEFAULT_FROM.minusDays(7));
+		cache.getOrFetchCovering(memberId, LOGIN, DEFAULT_FROM);
 		cache.getOrFetch(memberId, LOGIN);
 
 		assertThat(fakeGrass.callCount()).isEqualTo(2);
@@ -409,7 +409,7 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 
 	@Test
 	void 캐시가_없을_때_필요한_시작일이_더_이르면_그_시작일부터_부른다() {
-		LocalDate requiredFrom = LocalDate.of(2026, 9, 1);
+		LocalDate requiredFrom = DEFAULT_FROM.minusDays(30);
 
 		GrassSnapshot snapshot = cache.getOrFetchCovering(memberId, LOGIN, requiredFrom);
 
@@ -418,9 +418,8 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 	}
 
 	@ParameterizedTest
-	@CsvSource({"2026-10-05, 2026-09-28", "2026-10-04, 2026-09-21", "2026-10-07, 2026-09-28", "2026-10-11, 2026-09-28",
-			"2026-10-12, 2026-10-05"})
-	void 기본_조회_시작일은_지난_주_월요일이다(LocalDate today, LocalDate expected) {
+	@CsvSource({"2026-10-05, 2025-10-06", "2026-10-30, 2025-10-31", "2028-02-29, 2027-03-01", "2027-03-01, 2026-03-02"})
+	void 기본_조회_시작일은_1년_전_다음_날이다(LocalDate today, LocalDate expected) {
 		assertThat(GrassCacheService.defaultFrom(today)).isEqualTo(expected);
 	}
 
@@ -483,7 +482,7 @@ class GrassCacheServiceTest extends JudgmentIntegrationTest {
 
 		GrassSnapshot snapshot = cache.getOrFetch(memberId, LOGIN);
 
-		assertThat(snapshot.days()).hasSize(8);
+		assertThat(snapshot.days()).hasSize(365);
 		assertThat(fakeGrass.callCount()).isEqualTo(2);
 	}
 

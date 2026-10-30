@@ -92,8 +92,8 @@ class GitHubGrassClientQueryParseTest {
 	}
 
 	@Test
-	void 구간_상한은_62일이다() {
-		assertThat(GitHubGrassClient.MAX_DAYS).isEqualTo(62);
+	void 구간_상한은_366일이다() {
+		assertThat(GitHubGrassClient.MAX_DAYS).isEqualTo(366);
 	}
 
 	// ---------- 응답 해석 ----------
