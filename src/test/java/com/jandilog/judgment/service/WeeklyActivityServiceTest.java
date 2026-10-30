@@ -384,4 +384,57 @@ class WeeklyActivityServiceTest {
 		assertThat(service.weeklyActivity(MEMBER_ID, null).banner()).isNull();
 	}
 
+	// ----- 판정 전 지난 주: 일자별 값과 합계가 같은 계산에서 나온다 (유스케이스 점검 B3) -----
+
+	// 날짜별 잔디·기록글로 센 인증일과 응답의 verifiedDays가 같은지 본다
+	private static long verifiedOf(WeeklyActivityResponse response) {
+		return response.days().stream()
+				.filter(day -> Boolean.TRUE.equals(day.hasGrass()) || day.hasRecord())
+				.count();
+	}
+
+	@Test
+	void 판정_전_지난_주는_날짜별_잔디만큼_인증일을_센다() {
+		cache(snapshot(Map.of(LAST_WEEK, 2, LAST_WEEK.plusDays(2), 1, LAST_WEEK.plusDays(6), 4)));
+		when(sourceRepository.countRecordPostsByDay(MEMBER_ID, LAST_WEEK, LAST_WEEK.plusDays(6)))
+				.thenReturn(Map.of(LAST_WEEK.plusDays(3), 1));
+
+		WeeklyActivityResponse response = service.weeklyActivity(MEMBER_ID, "2026-10-05");
+
+		assertThat(response.judgment()).isNull();
+		assertThat(response.days()).extracting(ActivityDayResponse::hasGrass)
+				.containsExactly(true, false, true, false, false, false, true);
+		assertThat(response.verifiedDays()).isEqualTo(4);
+		assertThat((long) response.verifiedDays()).isEqualTo(verifiedOf(response));
+		assertThat(response.recordCount()).isEqualTo(1);
+	}
+
+	@Test
+	void 판정_전_지난_주가_첫_참가_주여도_인증일을_0으로_두지_않는다() {
+		ReflectionTestUtils.setField(member, "firstTeamJoinedAt", LAST_WEEK.plusDays(2).atTime(10, 0));
+		when(sourceRepository.hasCurrentTeam(MEMBER_ID)).thenReturn(true);
+		cache(snapshot(Map.of(LAST_WEEK, 1, LAST_WEEK.plusDays(1), 1)));
+
+		WeeklyActivityResponse response = service.weeklyActivity(MEMBER_ID, "2026-10-05");
+
+		assertThat(response.verifiedDays()).isEqualTo(2);
+		assertThat((long) response.verifiedDays()).isEqualTo(verifiedOf(response));
+	}
+
+	@Test
+	void 일년치_어제_캐시로도_판정_전_지난_주의_날짜별_값과_합계가_같다() {
+		LocalDate to = LocalDate.of(2026, 10, 13);
+		LocalDate from = GrassCacheService.defaultFrom(to);
+		List<GrassDay> days = from.datesUntil(to.plusDays(1))
+				.map(date -> new GrassDay(date, date.equals(LAST_WEEK.plusDays(4)) || date.equals(LAST_WEEK.plusDays(5)) ? 3 : 0))
+				.toList();
+		cache(new GrassSnapshot(MEMBER_ID, from, to, LocalDateTime.of(2026, 10, 13, 6, 0), days));
+
+		WeeklyActivityResponse response = service.weeklyActivity(MEMBER_ID, "2026-10-05");
+
+		assertThat(response.grassAvailable()).isTrue();
+		assertThat(response.verifiedDays()).isEqualTo(2);
+		assertThat((long) response.verifiedDays()).isEqualTo(verifiedOf(response));
+	}
+
 }
