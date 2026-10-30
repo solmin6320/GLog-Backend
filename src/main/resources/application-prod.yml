@@ -3,7 +3,7 @@
 spring:
   datasource:
     # Neon은 TLS 접속만 받는다. sslmode는 ProdProfileValidator가 require 이상인지 검사한다
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}?sslmode=${DB_SSL_MODE:require}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
