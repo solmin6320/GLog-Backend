@@ -1,7 +1,6 @@
 package com.jandilog.testsupport.admin;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -58,7 +57,7 @@ public class AdminFixture {
 		jdbc.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into team (name, leader_id, invite_code, is_public, created_at, deleted_at) values (?, ?, ?, ?, ?, ?)",
-					Statement.RETURN_GENERATED_KEYS);
+					new String[] {"id"});
 			ps.setString(1, name);
 			ps.setLong(2, leaderId);
 			ps.setString(3, "code-" + tag + "-" + sequence.incrementAndGet());
@@ -85,7 +84,7 @@ public class AdminFixture {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into weekly_judgment (member_id, week_start, status, skip_reason, hold_reason, retry_count,"
 							+ " verified_days, record_count, corrected, judged_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-					Statement.RETURN_GENERATED_KEYS);
+					new String[] {"id"});
 			ps.setLong(1, memberId);
 			ps.setObject(2, week);
 			ps.setString(3, status);
@@ -132,7 +131,7 @@ public class AdminFixture {
 		jdbc.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into warning (member_id, week_start, deleted_at, delete_reason, created_at) values (?, ?, ?, ?, ?)",
-					Statement.RETURN_GENERATED_KEYS);
+					new String[] {"id"});
 			ps.setLong(1, memberId);
 			ps.setObject(2, week);
 			ps.setObject(3, deletedAt);

@@ -1,7 +1,6 @@
 package com.jandilog.testsupport.judgment;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -64,7 +63,7 @@ public class JudgmentFixture {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into member (github_id, github_login, nickname, status, role, first_team_joined_at,"
 							+ " created_at) values (?, ?, ?, 'ACTIVE', 'MEMBER', ?, ?)",
-					Statement.RETURN_GENERATED_KEYS);
+					new String[] {"id"});
 			ps.setLong(1, githubId);
 			ps.setString(2, login);
 			ps.setString(3, login);
@@ -88,7 +87,7 @@ public class JudgmentFixture {
 		jdbc.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(
 					"insert into team (name, leader_id, invite_code, is_public, created_at) values (?, ?, ?, true, ?)",
-					Statement.RETURN_GENERATED_KEYS);
+					new String[] {"id"});
 			ps.setString(1, name);
 			ps.setLong(2, leaderId);
 			ps.setString(3, "code-" + tag + "-" + sequence.incrementAndGet());

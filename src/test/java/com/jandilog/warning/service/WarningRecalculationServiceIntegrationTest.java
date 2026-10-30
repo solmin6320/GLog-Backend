@@ -414,11 +414,11 @@ class WarningRecalculationServiceIntegrationTest extends WarningIntegrationTest 
 
 	@Test
 	void 경고_수와_연속_통과를_저장하는_컬럼이나_캐시_테이블이_없다() {
-		assertThat(fixture.count("select count(*) from information_schema.columns where table_schema = database()"
+		assertThat(fixture.count("select count(*) from information_schema.columns where table_schema = current_schema()"
 				+ " and table_name in ('member', 'weekly_judgment', 'warning', 'warning_team', 'penalty_fulfillment')"
 				+ " and (column_name like '%warning_count%' or column_name like '%streak%'"
 				+ " or column_name like '%consecutive%')")).isZero();
-		assertThat(fixture.count("select count(*) from information_schema.tables where table_schema = database()"
+		assertThat(fixture.count("select count(*) from information_schema.tables where table_schema = current_schema()"
 				+ " and (table_name like '%warning_state%' or table_name like '%streak%')")).isZero();
 	}
 
