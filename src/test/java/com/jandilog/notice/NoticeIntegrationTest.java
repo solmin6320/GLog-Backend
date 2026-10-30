@@ -54,7 +54,7 @@ class NoticeIntegrationTest extends NoticeIntegrationSupport {
 	}
 
 	private boolean pinnedInDb(String id) {
-		return Boolean.TRUE.equals(jdbc.queryForObject("select is_pinned from notice where id = ?", Boolean.class, id));
+		return Boolean.TRUE.equals(jdbc.queryForObject("select is_pinned from notice where id = ?", Boolean.class, Long.valueOf(id)));
 	}
 
 	// ----- 작성 -----
@@ -73,9 +73,9 @@ class NoticeIntegrationTest extends NoticeIntegrationSupport {
 		assertThat(notice.path("createdAt").asText()).isEqualTo("2026-10-01T12:00:00");
 		assertThat(notice.path("updatedAt").isNull()).isTrue();
 		String id = notice.path("id").asText();
-		assertThat(jdbc.queryForObject("select author_id from notice where id = ?", Long.class, id)).isEqualTo(admin);
-		assertThat(jdbc.queryForObject("select is_system from notice where id = ?", Boolean.class, id)).isFalse();
-		assertThat(jdbc.queryForObject("select created_at from notice where id = ?", LocalDateTime.class, id))
+		assertThat(jdbc.queryForObject("select author_id from notice where id = ?", Long.class, Long.valueOf(id))).isEqualTo(admin);
+		assertThat(jdbc.queryForObject("select is_system from notice where id = ?", Boolean.class, Long.valueOf(id))).isFalse();
+		assertThat(jdbc.queryForObject("select created_at from notice where id = ?", LocalDateTime.class, Long.valueOf(id)))
 				.isEqualTo(LocalDateTime.of(2026, 10, 1, 12, 0, 0));
 	}
 
@@ -115,7 +115,7 @@ class NoticeIntegrationTest extends NoticeIntegrationSupport {
 		JsonNode notice = ok(createNotice(admin, emojis, "내용", false)).data().path("createNotice");
 
 		assertThat(notice.path("title").asText()).isEqualTo(emojis);
-		assertThat(jdbc.queryForObject("select title from notice where id = ?", String.class, notice.path("id").asText()))
+		assertThat(jdbc.queryForObject("select title from notice where id = ?", String.class, notice.path("id").asLong()))
 				.isEqualTo(emojis);
 		assertError(createNotice(admin, "😀".repeat(201), "내용", false), ErrorCode.INVALID_INPUT.name());
 	}
@@ -127,7 +127,7 @@ class NoticeIntegrationTest extends NoticeIntegrationSupport {
 
 		assertThat(notice.path("content").asText()).hasSize(65_535);
 		assertThat(jdbc.queryForObject("select length(content) from notice where id = ?", Integer.class,
-				notice.path("id").asText())).isEqualTo(65_535);
+				notice.path("id").asLong())).isEqualTo(65_535);
 		assertError(createNotice(admin, "긴 공지", "a".repeat(65_536), false), ErrorCode.INVALID_INPUT.name());
 		// 한글은 글자당 3바이트라 21,845자까지다
 		assertThat(ok(createNotice(admin, "한글 공지", "가".repeat(21_845), false)).data().path("createNotice").path("content")
@@ -244,7 +244,7 @@ class NoticeIntegrationTest extends NoticeIntegrationSupport {
 		GraphQlResponse response = ok(delete(admin, id));
 
 		assertThat(response.data().path("deleteNotice").asBoolean()).isTrue();
-		assertThat(jdbc.queryForObject("select count(*) from notice where id = ?", Integer.class, id)).isZero();
+		assertThat(jdbc.queryForObject("select count(*) from notice where id = ?", Integer.class, Long.valueOf(id))).isZero();
 		assertError(get(member, id), ErrorCode.NOT_FOUND.name());
 		assertError(delete(admin, id), ErrorCode.NOT_FOUND.name());
 	}
@@ -298,12 +298,12 @@ class NoticeIntegrationTest extends NoticeIntegrationSupport {
 	@Test
 	void 시스템_공지가_이미_있으면_기동_초기화는_아무것도_만들지_않는다() {
 		insertSystemNotice(admin, "잔디 인정 규칙 " + members.tag());
-		Integer before = jdbc.queryForObject("select count(*) from notice where is_system = 1", Integer.class);
+		Integer before = jdbc.queryForObject("select count(*) from notice where is_system", Integer.class);
 
 		boolean created = systemNoticeService.ensureExists();
 
 		assertThat(created).isFalse();
-		assertThat(jdbc.queryForObject("select count(*) from notice where is_system = 1", Integer.class)).isEqualTo(before);
+		assertThat(jdbc.queryForObject("select count(*) from notice where is_system", Integer.class)).isEqualTo(before);
 	}
 
 	// ----- 접근 제어 -----

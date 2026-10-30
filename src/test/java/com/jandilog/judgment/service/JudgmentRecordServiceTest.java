@@ -26,7 +26,7 @@ import com.jandilog.testsupport.judgment.JudgmentFixture.WarningRow;
 import com.jandilog.testsupport.judgment.JudgmentIntegrationTest;
 import com.jandilog.testsupport.judgment.JudgmentScenario;
 
-// 판정 계산 결과가 MariaDB에 저장되는 모양 (기능명세서 5장, DB명세서 1-6~1-8). 계산기를 거쳐 실제 테이블 행까지 확인한다.
+// 판정 계산 결과가 PostgreSQL에 저장되는 모양 (기능명세서 5장, DB명세서 1-6~1-8). 계산기를 거쳐 실제 테이블 행까지 확인한다.
 // 시계는 2026-10-05(월) 07:00 KST, 판정 대상 주는 2026-09-28(월) ~ 10-04(일)
 class JudgmentRecordServiceTest extends JudgmentIntegrationTest {
 

@@ -52,7 +52,7 @@ class ProfileConfigTest {
 
 	private static Map<String, String> allProdVariables() {
 		return Map.ofEntries(
-				Map.entry("DB_HOST", "db.internal"), Map.entry("DB_PORT", "3306"), Map.entry("DB_NAME", "jandilog"),
+				Map.entry("DB_HOST", "db.internal"), Map.entry("DB_PORT", "5432"), Map.entry("DB_SSL_MODE", "require"), Map.entry("DB_NAME", "jandilog"),
 				Map.entry("DB_USERNAME", "app"), Map.entry("DB_PASSWORD", "db-pass"),
 				Map.entry("MONGODB_URI", "mongodb+srv://atlas.example/jandilog"),
 				Map.entry("REDIS_HOST", "redis.example"), Map.entry("REDIS_PORT", "6379"),
@@ -75,7 +75,7 @@ class ProfileConfigTest {
 	void 기본_프로필의_로컬_접속_기본값은_그대로다() {
 		MockEnvironment env = environment(false, Map.of());
 
-		assertThat(env.getProperty("spring.datasource.url")).startsWith("jdbc:mariadb://localhost:3306/jandilog");
+		assertThat(env.getProperty("spring.datasource.url")).isEqualTo("jdbc:postgresql://localhost:5432/jandilog?sslmode=disable");
 		assertThat(env.getProperty("spring.datasource.username")).isEqualTo("jandilog");
 		assertThat(env.getProperty("spring.datasource.password")).isEqualTo("jandilog");
 		assertThat(env.getProperty("spring.data.redis.host")).isEqualTo("localhost");
@@ -187,6 +187,7 @@ class ProfileConfigTest {
 	@CsvSource({
 			"spring.datasource.url, DB_HOST",
 			"spring.datasource.url, DB_PORT",
+			"spring.datasource.url, DB_SSL_MODE",
 			"spring.datasource.url, DB_NAME",
 			"spring.datasource.username, DB_USERNAME",
 			"spring.datasource.password, DB_PASSWORD",
@@ -210,7 +211,7 @@ class ProfileConfigTest {
 	void prod에서_환경변수를_모두_주면_그_값을_쓴다() {
 		MockEnvironment env = environment(true, allProdVariables());
 
-		assertThat(env.getProperty("spring.datasource.url")).startsWith("jdbc:mariadb://db.internal:3306/jandilog?");
+		assertThat(env.getProperty("spring.datasource.url")).isEqualTo("jdbc:postgresql://db.internal:5432/jandilog?sslmode=require");
 		assertThat(env.getProperty("spring.datasource.password")).isEqualTo("db-pass");
 		assertThat(env.getProperty("spring.data.mongodb.uri")).isEqualTo("mongodb+srv://atlas.example/jandilog");
 		assertThat(env.getProperty("spring.data.redis.host")).isEqualTo("redis.example");

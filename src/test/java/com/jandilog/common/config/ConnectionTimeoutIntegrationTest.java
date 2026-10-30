@@ -36,9 +36,9 @@ class ConnectionTimeoutIntegrationTest {
 	private ServerProperties serverProperties;
 
 	@Test
-	void Hikari_풀_대기와_MariaDB_연결_응답_상한이_적용된다() throws Exception {
+	void Hikari_풀_대기와_DB_연결_응답_상한이_적용된다() throws Exception {
 		HikariDataSource hikari = dataSource.unwrap(HikariDataSource.class);
-		assertThat(hikari.getConnectionTimeout()).isEqualTo(10_000);
+		assertThat(hikari.getConnectionTimeout()).isEqualTo(20_000);
 
 		// 드라이버가 socketTimeout을 받았는지는 연결의 네트워크 타임아웃으로 확인한다
 		try (Connection connection = dataSource.getConnection()) {

@@ -13,7 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.jandilog.warning.service.WarningRecalculationService;
 
-// 로컬 docker-compose MariaDB를 쓰는 경고 재계산 통합 테스트 공통 바탕. HTTP 서버는 띄우지 않는다
+// 로컬 docker-compose PostgreSQL를 쓰는 경고 재계산 통합 테스트 공통 바탕. HTTP 서버는 띄우지 않는다
 @SpringBootTest
 @ActiveProfiles("test")
 public abstract class WarningIntegrationTest {
