@@ -265,20 +265,21 @@ class ProfileConfigTest {
 	}
 
 	@Test
-	void DB_풀_타임아웃_기본값은_10초_연결_10초_응답_60초다() {
+	void DB_풀_타임아웃_기본값은_20초_연결_15초_응답_60초다() {
 		for (MockEnvironment env : List.of(environment(false, Map.of()), environment(true, allProdVariables()))) {
 			HikariDataSource hikari = bindHikari(env);
 
-			assertThat(hikari.getConnectionTimeout()).isEqualTo(10_000);
-			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("10000");
-			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("60000");
+			// PostgreSQL 드라이버의 connectTimeout·socketTimeout은 초 단위
+			assertThat(hikari.getConnectionTimeout()).isEqualTo(20_000);
+			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("15");
+			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("60");
 		}
 	}
 
 	@Test
 	void DB_풀_타임아웃은_환경변수로_바꿀_수_있다() {
-		Map<String, String> variables = Map.of("DB_POOL_WAIT_TIMEOUT_MS", "3000", "DB_CONNECT_TIMEOUT_MS", "4000",
-				"DB_SOCKET_TIMEOUT_MS", "5000");
+		Map<String, String> variables = Map.of("DB_POOL_WAIT_TIMEOUT_MS", "3000", "DB_CONNECT_TIMEOUT_SECONDS", "4",
+				"DB_SOCKET_TIMEOUT_SECONDS", "5");
 		Map<String, String> prod = new HashMap<>(allProdVariables());
 		prod.putAll(variables);
 
@@ -286,17 +287,17 @@ class ProfileConfigTest {
 			HikariDataSource hikari = bindHikari(env);
 
 			assertThat(hikari.getConnectionTimeout()).isEqualTo(3_000);
-			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("4000");
-			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("5000");
+			assertThat(hikari.getDataSourceProperties().getProperty("connectTimeout")).isEqualTo("4");
+			assertThat(hikari.getDataSourceProperties().getProperty("socketTimeout")).isEqualTo("5");
 		}
 	}
 
 	@Test
-	void JDBC_응답_상한은_InnoDB_락_대기_기본값_50초보다_길다() {
-		long socketTimeout = Long.parseLong(
-				bindHikari(environment(false, Map.of())).getDataSourceProperties().getProperty("socketTimeout"));
+	void Neon이_깨어나는_시간보다_연결_상한이_길다() {
+		long connectTimeout = Long.parseLong(
+				bindHikari(environment(false, Map.of())).getDataSourceProperties().getProperty("connectTimeout"));
 
-		assertThat(socketTimeout).isGreaterThan(50_000);
+		assertThat(connectTimeout).isGreaterThanOrEqualTo(10);
 	}
 
 	@Test
