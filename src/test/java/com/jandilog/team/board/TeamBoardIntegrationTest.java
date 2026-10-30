@@ -215,21 +215,22 @@ class TeamBoardIntegrationTest extends AuthIntegrationTest {
 	}
 
 	@Test
-	void 내_팀_목록에서_팀마다_이번_주_통과_미달_아직_인원을_함께_받는다() {
+	void 내_팀_목록에서_팀마다_이번_주_통과_미달_아직_제외_인원을_함께_받는다() {
 		GraphQlResponse response = graphQl.post(bearerFor(leader),
-				"{ myTeams { id weekSummary { weekStart passCount failCount notYetCount } } }");
+				"{ myTeams { id weekSummary { weekStart passCount failCount notYetCount excludedCount } } }");
 
 		assertThat(response.hasErrors()).as(response.rawBody()).isFalse();
 		JsonNode teams = response.data().path("myTeams");
 		assertThat(teams).hasSize(2);
 
-		// 현황판 팀: leader 통과, passer·notYet 아직, firstWeek 제외(어느 쪽에도 세지 않음)
+		// 현황판 팀: leader 통과, passer·notYet 아직, firstWeek 제외(통과·미달·아직에 세지 않고 제외 인원에 센다)
 		JsonNode board = teams.get(0);
 		assertThat(board.path("id").asLong()).isEqualTo(teamId);
 		assertThat(board.path("weekSummary").path("weekStart").asText()).isEqualTo("2026-10-05");
 		assertThat(board.path("weekSummary").path("passCount").asInt()).isEqualTo(1);
 		assertThat(board.path("weekSummary").path("failCount").asInt()).isZero();
 		assertThat(board.path("weekSummary").path("notYetCount").asInt()).isEqualTo(2);
+		assertThat(board.path("weekSummary").path("excludedCount").asInt()).isEqualTo(1);
 
 		// 다른 팀: leader 통과, passer·otherLeader 아직
 		JsonNode other = teams.get(1);
@@ -237,6 +238,7 @@ class TeamBoardIntegrationTest extends AuthIntegrationTest {
 		assertThat(other.path("weekSummary").path("passCount").asInt()).isEqualTo(1);
 		assertThat(other.path("weekSummary").path("failCount").asInt()).isZero();
 		assertThat(other.path("weekSummary").path("notYetCount").asInt()).isEqualTo(2);
+		assertThat(other.path("weekSummary").path("excludedCount").asInt()).isZero();
 
 		verifyNoInteractions(grassClient);
 	}

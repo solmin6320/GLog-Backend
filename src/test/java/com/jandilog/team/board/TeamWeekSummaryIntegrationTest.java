@@ -26,12 +26,12 @@ class TeamWeekSummaryIntegrationTest extends TeamBoardTestBase {
 			mutation($input: CreateTeamInput!) {
 			  createTeam(input: $input) {
 			    inviteCode
-			    team { id weekSummary { weekStart passCount failCount notYetCount } }
+			    team { id weekSummary { weekStart passCount failCount notYetCount excludedCount } }
 			  }
 			}
 			""";
 	private static final String TEAM_SUMMARY = """
-			query($id: ID!) { team(id: $id) { id weekSummary { weekStart passCount failCount notYetCount } } }
+			query($id: ID!) { team(id: $id) { id weekSummary { weekStart passCount failCount notYetCount excludedCount } } }
 			""";
 
 	private int postSeconds;
@@ -69,12 +69,15 @@ class TeamWeekSummaryIntegrationTest extends TeamBoardTestBase {
 		assertThat(team.path("weekSummary").path("weekStart").asText()).isEqualTo("2026-12-07");
 		assertThat(counts(team.path("weekSummary"))).containsExactly(0, 0, 0);
 		assertThat(counts(summaryOf(myTeams(creator), teamId))).containsExactly(0, 0, 0);
+		// 첫 참가 주인 만든 사람은 제외 인원으로 센다
+		assertThat(team.path("weekSummary").path("excludedCount").asInt()).isEqualTo(1);
 
 		// 첫 참가 주가 지나면 판정 대상이라 아직으로 센다
 		at("2026-12-14T00:00:00");
 		JsonNode nextWeek = summaryOf(myTeams(creator), teamId);
 		assertThat(nextWeek.path("weekStart").asText()).isEqualTo("2026-12-14");
 		assertThat(counts(nextWeek)).containsExactly(0, 0, 1);
+		assertThat(nextWeek.path("excludedCount").asInt()).isZero();
 	}
 
 	@Test
@@ -90,6 +93,7 @@ class TeamWeekSummaryIntegrationTest extends TeamBoardTestBase {
 		JsonNode summary = summaryOf(myTeams(leader), team.id());
 
 		assertThat(counts(summary)).containsExactly(0, 0, 2);
+		assertThat(summary.path("excludedCount").asInt()).isEqualTo(1);
 		// 방금 가입한 사람이 보는 목록에서도 같은 요약이다
 		assertThat(summaryOf(myTeams(newcomer), team.id())).isEqualTo(summary);
 	}

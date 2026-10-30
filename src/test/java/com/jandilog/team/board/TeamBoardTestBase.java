@@ -63,7 +63,7 @@ abstract class TeamBoardTestBase extends AuthIntegrationTest {
 			""";
 
 	protected static final String MY_TEAMS_QUERY = """
-			{ myTeams { id weekSummary { weekStart passCount failCount notYetCount } } }
+			{ myTeams { id weekSummary { weekStart passCount failCount notYetCount excludedCount } } }
 			""";
 
 	protected record TeamRef(long id, String code) {
