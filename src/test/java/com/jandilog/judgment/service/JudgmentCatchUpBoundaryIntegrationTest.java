@@ -57,8 +57,8 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 
 	// 요청 구간의 모든 날을 잔디 1칸으로 돌려주는 가짜 GitHub
 	private static final Answer<List<GrassDay>> EVERY_DAY_GRASS = invocation -> {
-		LocalDate from = invocation.getArgument(1);
-		LocalDate to = invocation.getArgument(2);
+		LocalDate from = invocation.getArgument(2);
+		LocalDate to = invocation.getArgument(3);
 		List<GrassDay> days = new ArrayList<>();
 		for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
 			days.add(new GrassDay(day, 1));
@@ -87,7 +87,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 
 	@BeforeEach
 	void setUpFakeGrass() {
-		doAnswer(EVERY_DAY_GRASS).when(grassClient).fetchDailyContributions(anyString(), any(), any());
+		doAnswer(EVERY_DAY_GRASS).when(grassClient).fetchDailyContributions(any(), anyString(), any(), any());
 	}
 
 	@AfterEach
@@ -206,7 +206,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		assertThat(count("judgment_day d join weekly_judgment j on j.id = d.judgment_id"
 				+ " where j.member_id = ? and j.week_start = ?", member.id(), week(1))).isZero();
 		assertThat(row(member, week(2))).containsEntry("status", "PASS");
-		verify(grassClient, times(1)).fetchDailyContributions(eq(member.login()), eq(week(2)), any());
+		verify(grassClient, times(1)).fetchDailyContributions(any(), eq(member.login()), eq(week(2)), any());
 	}
 
 	@Test
@@ -256,9 +256,9 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		Map<String, Object> hold = row(held, week(1));
 		assertThat(hold).containsEntry("status", "HOLD");
 		assertThat(((Number) hold.get("retry_count")).intValue()).isEqualTo(1);
-		verify(grassClient, times(1)).fetchDailyContributions(eq(missing.login()), eq(week(1)), any());
-		verify(grassClient, never()).fetchDailyContributions(eq(confirmed.login()), eq(week(1)), any());
-		verify(grassClient, never()).fetchDailyContributions(eq(held.login()), eq(week(1)), any());
+		verify(grassClient, times(1)).fetchDailyContributions(any(), eq(missing.login()), eq(week(1)), any());
+		verify(grassClient, never()).fetchDailyContributions(any(), eq(confirmed.login()), eq(week(1)), any());
+		verify(grassClient, never()).fetchDailyContributions(any(), eq(held.login()), eq(week(1)), any());
 	}
 
 	@Test
@@ -324,7 +324,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		service.catchUp();
 
 		assertThat(count("weekly_judgment where member_id = ? and week_start = ?", missing.id(), week(1))).isEqualTo(1);
-		verify(grassClient, times(1)).fetchDailyContributions(eq(missing.login()), eq(week(1)), any());
+		verify(grassClient, times(1)).fetchDailyContributions(any(), eq(missing.login()), eq(week(1)), any());
 	}
 
 	// ---- 여러 주 ----
@@ -354,8 +354,8 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		for (LocalDate week : expected) {
 			assertThat(row(member, week)).containsEntry("status", "PASS");
 		}
-		verify(grassClient, times(1)).fetchDailyContributions(eq(member.login()), any(), any());
-		verify(grassClient).fetchDailyContributions(eq(member.login()), eq(week(1)), any());
+		verify(grassClient, times(1)).fetchDailyContributions(any(), eq(member.login()), any(), any());
+		verify(grassClient).fetchDailyContributions(any(), eq(member.login()), eq(week(1)), any());
 	}
 
 	@Test
@@ -417,7 +417,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 			assertThat(count("warning where member_id = ?", excluded.id())).as("경고").isZero();
 			assertThat(count("judgment_day d join weekly_judgment j on j.id = d.judgment_id where j.member_id = ?",
 					excluded.id())).as("일자 근거").isZero();
-			verify(grassClient, never()).fetchDailyContributions(eq(excluded.login()), any(), any());
+			verify(grassClient, never()).fetchDailyContributions(any(), eq(excluded.login()), any(), any());
 		}
 		assertThat(count("warning where member_id = ?", settled.id())).isZero();
 	}
@@ -448,8 +448,8 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		assertThat(count("warning where member_id = ?", member.id())).isEqualTo(1);
 		assertThat(count("warning where member_id = ? and week_start = ?", member.id(), week(3))).isEqualTo(1);
 		// 면제 두 주는 잔디를 부르지 않아 미달인 week(3)에서만 한 번 조회한다
-		verify(grassClient, times(1)).fetchDailyContributions(eq(member.login()), any(), any());
-		verify(grassClient).fetchDailyContributions(eq(member.login()), eq(week(3)), any());
+		verify(grassClient, times(1)).fetchDailyContributions(any(), eq(member.login()), any(), any());
+		verify(grassClient).fetchDailyContributions(any(), eq(member.login()), eq(week(3)), any());
 	}
 
 	// ---- 중간 실패 ----
@@ -464,7 +464,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 		// 첫 조회(week(1))만 GitHub 오류, 이후 조회는 성공
 		doAnswer(invocation -> {
 			throw new GrassFetchException(HoldReason.API_ERROR, "GitHub 오류");
-		}).doAnswer(EVERY_DAY_GRASS).when(grassClient).fetchDailyContributions(anyString(), any(), any());
+		}).doAnswer(EVERY_DAY_GRASS).when(grassClient).fetchDailyContributions(any(), anyString(), any(), any());
 		JudgmentCatchUpService service = catchUpFor(historyRepository, member);
 
 		Result result = service.catchUp();
@@ -477,7 +477,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 				+ " where j.member_id = ? and j.week_start = ?", member.id(), week(1))).isZero();
 		assertThat(row(member, week(2))).containsEntry("status", "PASS");
 		assertThat(count("warning where member_id = ?", member.id())).isZero();
-		verify(grassClient, times(2)).fetchDailyContributions(eq(member.login()), any(), any());
+		verify(grassClient, times(2)).fetchDailyContributions(any(), eq(member.login()), any(), any());
 
 		// 다시 기동해도 보류 주를 따라잡기가 되풀이하지 않는다(보류 재시도는 별도 작업)
 		assertThat(service.catchUp().judgedWeeks()).isEmpty();
@@ -532,7 +532,7 @@ class JudgmentCatchUpBoundaryIntegrationTest extends AuthIntegrationTest {
 			assertThat(count("judgment_team t join weekly_judgment j on j.id = t.judgment_id"
 					+ " where j.member_id = ? and j.week_start in (?, ?)", member.id(), week(1), week(2))).isEqualTo(2);
 			// 잔디는 회원당 한 번만 조회한다
-			verify(grassClient, times(1)).fetchDailyContributions(eq(member.login()), any(), any());
+			verify(grassClient, times(1)).fetchDailyContributions(any(), eq(member.login()), any(), any());
 		}
 		assertThat(row(passer, week(1))).containsEntry("status", "PASS");
 		assertThat(row(passer, week(2))).containsEntry("status", "PASS");

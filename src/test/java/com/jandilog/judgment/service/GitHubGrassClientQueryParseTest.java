@@ -53,6 +53,42 @@ class GitHubGrassClientQueryParseTest {
 		return (GrassFetchException) thrown;
 	}
 
+	// ---------- 아이디 주인 확인 ----------
+
+	// databaseId가 붙은 달력 응답
+	private static String withDatabaseId(long databaseId, String body) {
+		return body.replace("{\"user\":{", "{\"user\":{\"databaseId\":" + databaseId + ",");
+	}
+
+	@Test
+	void 쿼리는_계정의_숫자_id도_묻는다() {
+		assertThat(GitHubGrassClient.buildQuery(FROM, FROM)).contains("user(login: $login) { databaseId ");
+	}
+
+	@Test
+	void 아이디의_현재_주인이_회원_계정과_같으면_잔디를_돌려준다() {
+		String body = withDatabaseId(1234L, responseOf(FROM, 1));
+
+		assertThat(GitHubGrassClient.parse(body, 1234L, FROM, FROM)).hasSize(1);
+	}
+
+	@Test
+	void 아이디를_다른_계정이_가져갔으면_재시도_없는_IDENTITY_MISMATCH다() {
+		String body = withDatabaseId(9999L, responseOf(FROM, 1));
+
+		Throwable thrown = catchThrowable(() -> GitHubGrassClient.parse(body, 1234L, FROM, FROM));
+
+		assertThat(thrown).isInstanceOf(GrassFetchException.class);
+		assertThat(((GrassFetchException) thrown).getReason()).isEqualTo(HoldReason.IDENTITY_MISMATCH);
+	}
+
+	@Test
+	void 회원_id를_모르면_주인을_확인하지_않는다() {
+		String body = withDatabaseId(9999L, responseOf(FROM, 1));
+
+		assertThat(GitHubGrassClient.parse(body, null, FROM, FROM)).hasSize(1);
+	}
+
 	// ---------- 구간 일자 → UTC 일자 경계 ----------
 
 	@Test

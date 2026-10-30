@@ -140,7 +140,7 @@ class GitHubGrassClientHttpTest {
 	void 정상_응답을_일자별_기여로_돌려준다() {
 		responseBody = GitHubGrassClientQueryParseTest.responseOf(FROM, 0, 3, 0, 1, 0, 0, 12);
 
-		List<GrassDay> days = client().fetchDailyContributions("octocat", FROM, TO);
+		List<GrassDay> days = client().fetchDailyContributions(null, "octocat", FROM, TO);
 
 		assertThat(days).extracting(GrassDay::count).containsExactly(0, 3, 0, 1, 0, 0, 12);
 		assertThat(days.get(0).date()).isEqualTo(FROM);
@@ -151,7 +151,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 토큰은_Authorization_헤더로만_가고_본문과_주소에는_없다() {
-		client().fetchDailyContributions("octocat", FROM, TO);
+		client().fetchDailyContributions(null, "octocat", FROM, TO);
 
 		assertThat(requests).hasSize(1);
 		Recorded request = requests.get(0);
@@ -168,7 +168,7 @@ class GitHubGrassClientHttpTest {
 	void 로그인은_쿼리_문자열이_아니라_variables로만_간다() throws IOException {
 		String hostile = "a\"}) { viewer { email } } #";
 
-		client().fetchDailyContributions(hostile, FROM, TO);
+		client().fetchDailyContributions(null, hostile, FROM, TO);
 
 		JsonNode payload = JSON.readTree(requests.get(0).body());
 		assertThat(payload.path("variables").path("login").asText()).isEqualTo(hostile);
@@ -178,7 +178,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 요청_구간은_시작일_0시부터_종료일_23시_59분_59초까지_UTC_일자_경계로_한_번에_보낸다() throws IOException {
-		client().fetchDailyContributions("octocat", FROM, TO);
+		client().fetchDailyContributions(null, "octocat", FROM, TO);
 
 		String query = JSON.readTree(requests.get(0).body()).path("query").asText();
 		assertThat(query).contains("from: \"2026-09-28T00:00:00Z\", to: \"2026-10-04T23:59:59Z\"");
@@ -187,7 +187,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 호출은_구간_전체를_요청_한_번으로_묶는다() {
-		client().fetchDailyContributions("octocat", FROM, TO);
+		client().fetchDailyContributions(null, "octocat", FROM, TO);
 
 		assertThat(requests).hasSize(1);
 	}
@@ -203,7 +203,7 @@ class GitHubGrassClientHttpTest {
 		}
 		responseBody = GitHubGrassClientQueryParseTest.responseOf(FROM, totals);
 
-		List<GrassDay> days = client().fetchDailyContributions("octocat", FROM, to);
+		List<GrassDay> days = client().fetchDailyContributions(null, "octocat", FROM, to);
 
 		assertThat(days).hasSize(62);
 		assertThat(days.get(61).date()).isEqualTo(to);
@@ -212,7 +212,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 구간이_63일이면_요청_없이_거부한다() {
-		Throwable thrown = catchThrowable(() -> client().fetchDailyContributions("octocat", FROM, FROM.plusDays(62)));
+		Throwable thrown = catchThrowable(() -> client().fetchDailyContributions(null, "octocat", FROM, FROM.plusDays(62)));
 
 		assertThat(thrown).isInstanceOf(IllegalArgumentException.class);
 		assertThat(requests).isEmpty();
@@ -220,7 +220,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 시작일이_종료일보다_늦으면_요청_없이_거부한다() {
-		Throwable thrown = catchThrowable(() -> client().fetchDailyContributions("octocat", TO, FROM));
+		Throwable thrown = catchThrowable(() -> client().fetchDailyContributions(null, "octocat", TO, FROM));
 
 		assertThat(thrown).isInstanceOf(IllegalArgumentException.class);
 		assertThat(requests).isEmpty();
@@ -229,7 +229,7 @@ class GitHubGrassClientHttpTest {
 	@ParameterizedTest
 	@ValueSource(strings = {"", "   "})
 	void 로그인이_비었으면_요청_없이_IDENTITY_MISMATCH다(String login) {
-		GrassFetchException e = failure(() -> client().fetchDailyContributions(login, FROM, TO));
+		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, login, FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.IDENTITY_MISMATCH);
 		assertThat(requests).isEmpty();
@@ -237,7 +237,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 로그인이_null이어도_요청_없이_IDENTITY_MISMATCH다() {
-		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, FROM, TO));
+		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, null, FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.IDENTITY_MISMATCH);
 		assertThat(requests).isEmpty();
@@ -251,7 +251,7 @@ class GitHubGrassClientHttpTest {
 		status = httpStatus;
 		responseBody = "SECRET-BODY-0123456789";
 
-		GrassFetchException e = failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
 		assertThat(e.isRetryable()).isTrue();
@@ -264,7 +264,7 @@ class GitHubGrassClientHttpTest {
 		responseBody = "{\"data\":{\"user\":null},\"errors\":[{\"type\":\"NOT_FOUND\",\"path\":[\"user\"],"
 				+ "\"message\":\"Could not resolve to a User with the login of 'octocat'.\"}]}";
 
-		GrassFetchException e = failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.IDENTITY_MISMATCH);
 		assertThat(e.isRetryable()).isFalse();
@@ -275,7 +275,7 @@ class GitHubGrassClientHttpTest {
 	void 응답_200의_RATE_LIMITED는_API_ERROR다() {
 		responseBody = "{\"data\":null,\"errors\":[{\"type\":\"RATE_LIMITED\",\"message\":\"API rate limit exceeded\"}]}";
 
-		GrassFetchException e = failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
 		assertTokenAbsent(e);
@@ -286,7 +286,7 @@ class GitHubGrassClientHttpTest {
 	void 응답_200이어도_형식이_이상하면_API_ERROR다(String body) {
 		responseBody = body;
 
-		GrassFetchException e = failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+		GrassFetchException e = failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
 		assertTokenAbsent(e);
@@ -297,7 +297,7 @@ class GitHubGrassClientHttpTest {
 		GitHubGrassClient client = client();
 		server.stop(0);
 
-		GrassFetchException e = failure(() -> client.fetchDailyContributions("octocat", FROM, TO));
+		GrassFetchException e = failure(() -> client.fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
 		assertThat(e.isRetryable()).isTrue();
@@ -309,7 +309,7 @@ class GitHubGrassClientHttpTest {
 		delayMillis = 1_500;
 		GitHubGrassClient slowClient = client(Duration.ofMillis(300));
 
-		GrassFetchException e = failure(() -> slowClient.fetchDailyContributions("octocat", FROM, TO));
+		GrassFetchException e = failure(() -> slowClient.fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
 		assertTokenAbsent(e);
@@ -328,7 +328,7 @@ class GitHubGrassClientHttpTest {
 		try {
 			redirectTo = "http://127.0.0.1:" + other.getAddress().getPort() + "/capture";
 
-			GrassFetchException e = failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+			GrassFetchException e = failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 
 			assertThat(e.getReason()).isEqualTo(HoldReason.API_ERROR);
 			assertThat(otherAuthorizations).isEmpty();
@@ -341,7 +341,7 @@ class GitHubGrassClientHttpTest {
 
 	@Test
 	void 성공_경로에서도_토큰이_로그에_남지_않는다() {
-		client().fetchDailyContributions("octocat", FROM, TO);
+		client().fetchDailyContributions(null, "octocat", FROM, TO);
 
 		assertThat(logs.list).allSatisfy(event -> assertThat(event.getFormattedMessage()).doesNotContain(TOKEN));
 	}
@@ -349,10 +349,10 @@ class GitHubGrassClientHttpTest {
 	@Test
 	void 실패_경로_로그에도_토큰이_없다() {
 		status = 401;
-		failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+		failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 		status = 200;
 		responseBody = "{\"errors\":[{\"type\":\"RATE_LIMITED\"}]}";
-		failure(() -> client().fetchDailyContributions("octocat", FROM, TO));
+		failure(() -> client().fetchDailyContributions(null, "octocat", FROM, TO));
 
 		assertThat(logs.list).isNotEmpty();
 		assertThat(logs.list).allSatisfy(event -> assertThat(event.getFormattedMessage()).doesNotContain(TOKEN));

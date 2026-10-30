@@ -59,7 +59,7 @@ public class GitHubGrassClient implements GrassClient {
 	}
 
 	@Override
-	public List<GrassDay> fetchDailyContributions(String githubLogin, LocalDate from, LocalDate to) {
+	public List<GrassDay> fetchDailyContributions(Long githubId, String githubLogin, LocalDate from, LocalDate to) {
 		if (githubLogin == null || githubLogin.isBlank()) {
 			throw new GrassFetchException(HoldReason.IDENTITY_MISMATCH, "GitHub 아이디가 비었어요");
 		}
@@ -85,18 +85,23 @@ public class GitHubGrassClient implements GrassClient {
 			log.warn("GitHub 잔디 조회 통신 실패 type={}", e.getClass().getSimpleName());
 			throw new GrassFetchException(HoldReason.API_ERROR, "GitHub 통신에 실패했어요", e);
 		}
-		return parse(responseBody, from, to);
+		return parse(responseBody, githubId, from, to);
 	}
 
 	// 구간 일자를 UTC 일자 경계로 보낸다. 날짜 문자열은 LocalDate에서 만들므로 외부 입력이 쿼리에 섞이지 않는다
 	static String buildQuery(LocalDate from, LocalDate to) {
-		return "query($login: String!) { user(login: $login) { contributionsCollection(from: \"" + from
+		return "query($login: String!) { user(login: $login) { databaseId contributionsCollection(from: \"" + from
 				+ "T00:00:00Z\", to: \"" + to + "T23:59:59Z\") { contributionCalendar { weeks { contributionDays {"
 				+ " date contributionCount } } } } } }";
 	}
 
-	// 응답을 일자별 기여 수로 바꾼다. GraphQL 오류는 200 응답 안의 errors로 오기도 한다
 	static List<GrassDay> parse(String body, LocalDate from, LocalDate to) {
+		return parse(body, null, from, to);
+	}
+
+	// 응답을 일자별 기여 수로 바꾼다. GraphQL 오류는 200 응답 안의 errors로 오기도 한다.
+	// githubId가 있으면 그 아이디의 현재 주인이 같은 계정인지 확인한다(아이디를 바꾼 뒤 남이 가져간 경우)
+	static List<GrassDay> parse(String body, Long githubId, LocalDate from, LocalDate to) {
 		if (body == null || body.isBlank()) {
 			throw new GrassFetchException(HoldReason.API_ERROR, "GitHub 응답이 비었어요");
 		}
@@ -127,6 +132,10 @@ public class GitHubGrassClient implements GrassClient {
 		JsonNode user = root.path("data").path("user");
 		if (!user.isObject()) {
 			throw new GrassFetchException(HoldReason.API_ERROR, "GitHub 응답에 사용자 정보가 없어요");
+		}
+		JsonNode databaseId = user.path("databaseId");
+		if (githubId != null && databaseId.isIntegralNumber() && databaseId.asLong() != githubId) {
+			throw new GrassFetchException(HoldReason.IDENTITY_MISMATCH, "GitHub 아이디의 주인이 회원 계정과 달라요");
 		}
 		JsonNode weeks = user.path("contributionsCollection").path("contributionCalendar").path("weeks");
 		if (!weeks.isArray()) {

@@ -81,9 +81,9 @@ class JudgmentCatchUpIntegrationTest extends AuthIntegrationTest {
 				memberId, MISSED_WEEK.plusDays(2), MISSED_WEEK.plusDays(2).atTime(12, 0));
 
 		// 잔디 캐시가 비어 있으면 한 번 조회한다: 요청 구간의 모든 날을 1칸으로 돌려주는 가짜
-		when(grassClient.fetchDailyContributions(anyString(), any(), any())).thenAnswer(invocation -> {
-			LocalDate from = invocation.getArgument(1);
-			LocalDate to = invocation.getArgument(2);
+		when(grassClient.fetchDailyContributions(any(), anyString(), any(), any())).thenAnswer(invocation -> {
+			LocalDate from = invocation.getArgument(2);
+			LocalDate to = invocation.getArgument(3);
 			List<GrassDay> days = new ArrayList<>();
 			for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
 				days.add(new GrassDay(day, 1));
@@ -133,7 +133,7 @@ class JudgmentCatchUpIntegrationTest extends AuthIntegrationTest {
 		// 아직 끝나지 않은 현재 주는 판정하지 않는다
 		assertThat(count("weekly_judgment where member_id = ? and week_start = ?", memberId, CURRENT_WEEK)).isZero();
 		// 잔디는 기존 캐시 경로로 한 번만 조회했다
-		verify(grassClient, times(1)).fetchDailyContributions(eq(githubLogin), any(), any());
+		verify(grassClient, times(1)).fetchDailyContributions(any(), eq(githubLogin), any(), any());
 
 		// 같은 시각에 다시 기동해도 빠진 주가 없어 아무것도 하지 않는다
 		JudgmentCatchUpService.Result again = catchUp.catchUp();

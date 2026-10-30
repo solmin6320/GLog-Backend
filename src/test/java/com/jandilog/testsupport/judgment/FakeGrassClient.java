@@ -85,7 +85,7 @@ public class FakeGrassClient implements GrassClient {
 	}
 
 	@Override
-	public List<GrassDay> fetchDailyContributions(String githubLogin, LocalDate from, LocalDate to) {
+	public List<GrassDay> fetchDailyContributions(Long githubId, String githubLogin, LocalDate from, LocalDate to) {
 		int callNumber = callCount.incrementAndGet();
 		calls.add(new Call(githubLogin, from, to));
 		long delay = delayMillis;
