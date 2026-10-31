@@ -1,5 +1,5 @@
 # 로컬 개발용 DB 3종 (기능명세서 10장, DB명세서 5-3)
-# 운영은 PostgreSQL은 AWS RDS, MongoDB는 Atlas, Redis는 AWS ElastiCache를 쓴다
+# 운영은 PostgreSQL은 AWS RDS, MongoDB는 Atlas, Redis는 AWS ElastiCache(Valkey)를 쓴다
 name: jandilog
 
 services:
