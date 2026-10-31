@@ -30,7 +30,7 @@ description: 잔디로그 DB 3종(MariaDB·MongoDB·Redis) 경계, Flyway, 엔�
 - 프로필 글·댓글 수는 Mongo `countDocuments`(`post_index`로 세지 않는다, 4-5).
 
 ## Redis 키
-`grass:{memberId}:{yyyy-MM-dd}` 26h · `ban:{teamId}:{memberId}` 1년 · `authcode:{code}` 60s. 재계산 락은 Redis 키 없이 MariaDB 회원 행 비관적 락(Q-08).
+`grass:{memberId}:{yyyy-MM-dd}` 26h · `grasshistory:{memberId}` 26h(프로필 잔디 전체 이력) · `ban:{teamId}:{memberId}` 1년 · `authcode:{code}` 60s. 재계산 락은 Redis 키 없이 MariaDB 회원 행 비관적 락(Q-08).
 - 일회용 코드는 사용 즉시 삭제. 추방 차단은 초대코드 참가에만 적용(아이디 초대 허용).
 - Actuator 헬스체크에서 Redis 제외.
 

@@ -13,6 +13,7 @@ import com.jandilog.common.exception.ErrorCode;
 import com.jandilog.common.validation.InputRules;
 import com.jandilog.judgment.dto.GrassSnapshot;
 import com.jandilog.judgment.service.GrassCacheService;
+import com.jandilog.judgment.service.GrassHistoryCacheService;
 import com.jandilog.member.domain.Member;
 import com.jandilog.member.domain.MemberStatus;
 import com.jandilog.member.repository.MemberRepository;
@@ -25,7 +26,8 @@ import com.jandilog.team.query.TeamReadModel;
 import com.jandilog.warning.service.WarningRecalculationService;
 
 // 프로필 조회 (기능명세서 8장, PR-01). 본인 · 타인이 같은 모양이고 승인된 회원만 볼 수 있다.
-// 잔디는 하루 한 번 갱신한 캐시를 그대로 보여주고 GitHub를 부르지 않는다 (기능명세서 5장)
+// 잔디는 하루 한 번 갱신한 캐시를 그대로 보여주고 GitHub를 부르지 않는다 (기능명세서 5장).
+// GitHub 가입일부터의 전체 이력 캐시를 먼저 쓰고, 없으면 판정용 2주 캐시를 쓴다 (2026-10-31 사용자 지시)
 @Service
 public class ProfileService {
 
@@ -34,15 +36,17 @@ public class ProfileService {
 	private final MemberRepository memberRepository;
 	private final ProfileActivityRepository activityRepository;
 	private final GrassCacheService grassCacheService;
+	private final GrassHistoryCacheService grassHistoryCacheService;
 	private final WarningRecalculationService recalculationService;
 	private final TeamReadModel teamReadModel;
 
 	public ProfileService(MemberRepository memberRepository, ProfileActivityRepository activityRepository,
-			GrassCacheService grassCacheService, WarningRecalculationService recalculationService,
-			TeamReadModel teamReadModel) {
+			GrassCacheService grassCacheService, GrassHistoryCacheService grassHistoryCacheService,
+			WarningRecalculationService recalculationService, TeamReadModel teamReadModel) {
 		this.memberRepository = memberRepository;
 		this.activityRepository = activityRepository;
 		this.grassCacheService = grassCacheService;
+		this.grassHistoryCacheService = grassHistoryCacheService;
 		this.recalculationService = recalculationService;
 		this.teamReadModel = teamReadModel;
 	}
@@ -66,7 +70,8 @@ public class ProfileService {
 	// 캐시가 없거나 Redis를 읽지 못하면 null: 화면이 "잔디를 불러오지 못했어요"(E-32)를 보여준다
 	public ProfileGrass grass(long memberId) {
 		try {
-			Optional<GrassSnapshot> snapshot = grassCacheService.findLatest(memberId);
+			Optional<GrassSnapshot> snapshot = grassHistoryCacheService.find(memberId)
+					.or(() -> grassCacheService.findLatest(memberId));
 			return snapshot.map(ProfileGrass::from).orElse(null);
 		}
 		catch (DataAccessException e) {
