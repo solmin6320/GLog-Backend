@@ -14,7 +14,7 @@ description: 잔디로그 백엔드 공통 규칙. 코드를 쓰거나 커밋·�
 ## 코드
 - Java 21, Spring Boot 3.x. 패키지: `com.jandilog.<도메인>.{domain,repository,service,graphql,dto}` (member, team, post, notice, judgment, warning, exemption, profile, admin, common). 공통 설정은 `common.config`.
 - 시간: JVM·스케줄러 모두 `Asia/Seoul`. 주차는 **월요일 `LocalDate`** 로 식별.
-- 경고·판정 같은 불이익 데이터는 MariaDB 트랜잭션 안에서만 변경.
+- 경고·판정 같은 불이익 데이터는 PostgreSQL 트랜잭션 안에서만 변경.
 - 권한은 `@PreAuthorize` 메서드 단위. URL 권한에 기대지 않는다.
 - **기획서에 없는 기능·동작을 개발하지 않는다.** 필요해 보이면 멈추고 질문.
 
@@ -28,5 +28,5 @@ description: 잔디로그 백엔드 공통 규칙. 코드를 쓰거나 커밋·�
 - 브랜치는 직접 삭제하지 않는다. main 머지 확인 후 총괄이 로컬·원격 모두 삭제.
 
 ## 의존성
-- **기획서 기술 스택에 없는 의존성은 추가하지 않는다.** 허용 범위: Spring Boot, Spring for GraphQL, Spring Security(OAuth2 Client·JWT), Spring Data JPA, Spring Data MongoDB, Spring Data Redis, Flyway, MariaDB 드라이버, Spring Scheduler, AWS SDK for Java(S3), JUnit, (선택) QueryDSL. 개발 편의 도구 **Lombok, Spring Boot DevTools**는 사용자가 허용.
+- **기획서 기술 스택에 없는 의존성은 추가하지 않는다.** 허용 범위: Spring Boot, Spring for GraphQL, Spring Security(OAuth2 Client·JWT), Spring Data JPA, Spring Data MongoDB, Spring Data Redis, Flyway(PostgreSQL 모듈), PostgreSQL 드라이버, Spring Scheduler, AWS SDK for Java(S3), JUnit, (선택) QueryDSL. 개발 편의 도구 **Lombok, Spring Boot DevTools**는 사용자가 허용.
 - 위 밖이 필요하면 `build.gradle`을 건드리지 말고 사용자에게 이유와 함께 묻는다.

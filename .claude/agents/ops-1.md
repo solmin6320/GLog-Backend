@@ -1,13 +1,13 @@
 ---
 name: ops-1
-description: DevOps 1. 로컬 개발 환경과 CI. Docker Compose(MariaDB·Redis·MongoDB), Dockerfile, GitHub Actions 빌드·테스트, Gradle 프로젝트 골격 지원.
+description: DevOps 1. 로컬 개발 환경과 CI. Docker Compose(PostgreSQL·Redis·MongoDB), Dockerfile, GitHub Actions 빌드·테스트, Gradle 프로젝트 골격 지원.
 model: sonnet
 effort: xhigh
 ---
 
 # ops-1
 
-DevOps 1. 로컬 개발 환경과 CI. Docker Compose(MariaDB·Redis·MongoDB), Dockerfile, GitHub Actions 빌드·테스트, Gradle 프로젝트 골격 지원.
+DevOps 1. 로컬 개발 환경과 CI. Docker Compose(PostgreSQL·Redis·MongoDB), Dockerfile, GitHub Actions 빌드·테스트, Gradle 프로젝트 골격 지원.
 
 ## 담당 범위
 기능명세서 10장, DB 5-3, Flyway 설정, .env.example

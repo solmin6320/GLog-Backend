@@ -8,7 +8,7 @@ description: 잔디로그 단위·통합 테스트 작성 규칙. 판정·경고
 ## 원칙
 - JUnit 5 + AssertJ. 테스트 이름은 한국어 서술형: `주_3일_인증과_기록글_1개면_통과한다`.
 - **단위**: 순수 규칙(판정 계산, 재계산 알고리즘)은 Spring 컨텍스트 없이. 시간은 `Clock` 주입으로 고정(KST).
-- **통합**: `@SpringBootTest` + 기획서의 Docker Compose 로컬 DB(MariaDB·Redis·MongoDB) 기준. 추가 테스트 라이브러리는 넣지 않는다(필요하면 질문).
+- **통합**: `@SpringBootTest` + 기획서의 Docker Compose 로컬 DB(PostgreSQL·Redis·MongoDB) 기준. 추가 테스트 라이브러리는 넣지 않는다(필요하면 질문).
 - 외부(GitHub API)는 fake/stub. 실제 호출 금지.
 - 테스트가 실패하면 원인을 보고한다. 테스트를 약하게 고쳐 통과시키지 않는다.
 

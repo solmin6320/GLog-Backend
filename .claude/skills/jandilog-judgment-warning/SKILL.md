@@ -10,7 +10,7 @@ description: 잔디로그 주간 판정·경고·면제·정정·재계산 구�
 - 통과 = 인증일 ≥ 3 **AND** 기록글 ≥ 1. 인증일 = `has_grass OR has_record`인 날 수(같은 날 둘 다여도 1).
 - 제외(`EXCLUDED`): NO_TEAM, FIRST_WEEK(`member.first_team_joined_at`, 생애 1회). 면제(`EXEMPT`): EXEMPTION_PERIOD, PERSONAL_EXEMPTION. 둘이 겹치면 독립 보존(E-44).
 - 소속은 주 종료 시각 스냅샷 → `judgment_team`. 일자별 근거 7행 → `judgment_day`.
-- 판정은 **MariaDB + Redis 잔디 캐시만** 읽는다(Mongo 접근 금지). `post_index.is_record`, `written_date` 사용.
+- 판정은 **PostgreSQL + Redis 잔디 캐시만** 읽는다(Mongo 접근 금지). `post_index.is_record`, `written_date` 사용.
 - GitHub 조회 실패 → 그 회원만 `HOLD`, 경고 없음. 사유 `API_ERROR`(재시도) / `IDENTITY_MISMATCH`(재로그인).
 - 재실행은 HOLD만. `(member_id, week_start)` UNIQUE 기반 멱등(E-35). 확정 상태는 skip.
 - 확정 판정은 글 삭제로 불변. 바뀌는 길은 관리자 정정(PASS/FAIL/EXEMPT만, HOLD·EXCLUDED 정정 불가)뿐.
@@ -36,7 +36,7 @@ description: 잔디로그 주간 판정·경고·면제·정정·재계산 구�
 - Q-02 추방 후 아이디 재초대로 복귀하면 그 팀 카테고리 복원 + 경고 삭제 표시 해제.
 - Q-03 보류가 남아 있는 동안 그 회원의 경고 재계산을 보류(끊지도 건너뛰지도 않음).
 - Q-04 소속 기준은 주 종료 시각(일 23:59) 스냅샷.
-- Q-07 재시도 10분 간격 3회. Q-08 MariaDB 회원 행 비관적 락. Q-09 GitHub "사용자 없음"이면 재시도 없이 IDENTITY_MISMATCH.
+- Q-07 재시도 10분 간격 3회. Q-08 PostgreSQL 회원 행 비관적 락. Q-09 GitHub "사용자 없음"이면 재시도 없이 IDENTITY_MISMATCH.
 - Q-10 경고 0개여도 2주 연속이면 연속 0 / 벌칙 대상(3개)에서는 연속 안 쌓음 / 3개 초과 허용 / 이행 시 연속 0.
 - Q-11 기록글 날짜는 최초 저장일 고정, 판정 전 삭제 글 제외.
 

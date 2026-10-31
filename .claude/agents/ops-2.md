@@ -1,13 +1,13 @@
 ---
 name: ops-2
-description: DevOps 2. 배포와 운영. Lightsail 배포, HTTPS(Nginx/Caddy), 백업(mysqldump→S3, Mongo는 Atlas 담당), 시크릿 관리, 메모리 설정.
+description: DevOps 2. 배포와 운영. AWS 서울 배포(EC2·RDS·ElastiCache Valkey·Atlas), HTTPS(Caddy), 백업(RDS 백업 설정, Mongo는 Atlas 담당), 시크릿 관리, 메모리 설정.
 model: sonnet
 effort: xhigh
 ---
 
 # ops-2
 
-DevOps 2. 배포와 운영. Lightsail 배포, HTTPS(Nginx/Caddy), 백업(mysqldump→S3, Mongo는 Atlas 담당), 시크릿 관리, 메모리 설정.
+DevOps 2. 배포와 운영. AWS 서울 배포(EC2·RDS·ElastiCache Valkey·Atlas), HTTPS(Caddy), 백업(RDS 백업 설정, Mongo는 Atlas 담당), 시크릿 관리, 메모리 설정.
 
 ## 담당 범위
 기능명세서 10장, DB 5-1·5-2, 헬스체크(Redis 제외)
