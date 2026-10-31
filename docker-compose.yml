@@ -1,9 +1,9 @@
 # 로컬 개발용 DB 3종 (기능명세서 10장, DB명세서 5-3)
-# 운영은 PostgreSQL은 Neon, MongoDB는 Atlas, Redis는 Upstash를 쓴다
+# 운영은 PostgreSQL은 AWS RDS, MongoDB는 Atlas, Redis는 AWS ElastiCache를 쓴다
 name: jandilog
 
 services:
-  # 운영 Neon과 같은 PostgreSQL 16
+  # 로컬 PostgreSQL 16
   postgres:
     image: postgres:16
     container_name: jandilog-postgres
