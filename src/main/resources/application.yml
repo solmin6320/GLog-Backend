@@ -48,7 +48,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/jandilog}
-    # Redis: 운영(AWS ElastiCache, 전송 중 암호화·AUTH 토큰)은 REDIS_SSL=true
+    # Redis: 운영(AWS ElastiCache Valkey, 전송 중 암호화·AUTH 토큰)은 REDIS_SSL=true
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
