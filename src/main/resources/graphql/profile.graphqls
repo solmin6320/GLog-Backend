@@ -19,7 +19,7 @@ type Profile {
     postCount: Int!
     "삭제되지 않은 댓글 수 (MongoDB 집계)"
     commentCount: Int!
-    "GitHub 잔디. 캐시가 없으면 null (E-32). 하루 한 번 갱신한 캐시이고 이 쿼리가 GitHub를 부르지 않는다"
+    "GitHub 잔디. GitHub 가입일부터 오늘까지 전체 이력이고, 그 캐시가 없으면 지난 주 월요일부터 오늘까지. 둘 다 없으면 null (E-32). 하루 한 번 갱신한 캐시이고 이 쿼리가 GitHub를 부르지 않는다"
     grass: ProfileGrass
     "경고 합계 카드 (n / 3)"
     warning: ProfileWarning!
