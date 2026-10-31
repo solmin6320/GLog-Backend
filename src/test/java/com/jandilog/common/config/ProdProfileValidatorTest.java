@@ -22,7 +22,7 @@ class ProdProfileValidatorTest {
 	private static final String MONGO_URI_KEY = "spring.data.mongodb.uri";
 	private static final String DB_PASSWORD_KEY = "spring.datasource.password";
 	private static final String DB_URL_KEY = "spring.datasource.url";
-	private static final String DB_URL = "jdbc:postgresql://ep-test.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require";
+	private static final String DB_URL = "jdbc:postgresql://jandilog-test.abcdefghijkl.ap-northeast-2.rds.amazonaws.com:5432/jandilog?sslmode=require";
 	private static final String HTTPS_REDIRECT ="https://api.example.com/login/oauth2/code/{registrationId}";
 	private static final String SECRET = "k3Jx9Qv7mW2pL8nR4tY6uB1cD5eF0gHaZsXoViNqMlPwKjTy";
 	// 아래 두 값은 테스트 전용이고 실제 비밀값이 아니다

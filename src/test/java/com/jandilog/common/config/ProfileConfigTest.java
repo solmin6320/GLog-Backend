@@ -293,7 +293,7 @@ class ProfileConfigTest {
 	}
 
 	@Test
-	void Neon이_깨어나는_시간보다_연결_상한이_길다() {
+	void DB_연결_상한_기본값은_10초_이상이다() {
 		long connectTimeout = Long.parseLong(
 				bindHikari(environment(false, Map.of())).getDataSourceProperties().getProperty("connectTimeout"));
 
