@@ -16,13 +16,13 @@ spring:
             # GitHub OAuth App에 등록한 콜백 주소. 백엔드 공개 주소 기준 한 곳
             redirect-uri: ${BACKEND_BASE_URL:http://localhost:8080}/login/oauth2/code/{registrationId}
 
-  # PostgreSQL (운영 Neon). 접속 정보는 환경변수, 기본값은 로컬 docker-compose 값. 운영 Neon은 DB_SSL_MODE=require
+  # PostgreSQL (운영 AWS RDS). 접속 정보는 환경변수, 기본값은 로컬 docker-compose 값. 운영은 DB_SSL_MODE=require 이상
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:jandilog}?sslmode=${DB_SSL_MODE:disable}
     username: ${DB_USERNAME:jandilog}
     password: ${DB_PASSWORD:jandilog}
     # 풀 대기(밀리초)·연결·쿼리 응답(초) 상한. DB가 멈춰도 요청이 무한정 쌓이지 않게 한다. 환경변수로 덮어쓴다
-    # Neon 무료 요금제는 쉬다가 깨어나는 데 몇 초 걸려서 연결 상한을 넉넉히 둔다
+    # 연결 상한은 넉넉히 둔다
     hikari:
       connection-timeout: ${DB_POOL_WAIT_TIMEOUT_MS:20000}
       data-source-properties:
@@ -48,7 +48,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/jandilog}
-    # Redis: 운영(Upstash)은 REDIS_SSL=true
+    # Redis: 운영(AWS ElastiCache, 전송 중 암호화·AUTH 토큰)은 REDIS_SSL=true
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -69,7 +69,7 @@ spring:
 # OAuth 인증 요청을 잇는 동안에만 세션을 쓴다. 그 뒤 세션은 버린다
 server:
   # .env의 SERVER_PORT로 포트를 바꾼다 (다른 프로그램이 8080을 쓸 때). 바꾸면 BACKEND_BASE_URL도 같이 맞춘다
-  # Render는 PORT로 포트를 정해 준다
+  # SERVER_PORT가 없으면 PORT를 쓴다
   port: ${SERVER_PORT:${PORT:8080}}
   servlet:
     session:
@@ -111,7 +111,7 @@ jandilog:
     server-selection-timeout: ${MONGO_SERVER_SELECTION_TIMEOUT:10s}
     pool-wait-timeout: ${MONGO_POOL_WAIT_TIMEOUT:10s}
 
-# 헬스체크만 노출하고 Redis는 제외 (Upstash 명령 수 절약, 기능명세서 10장)
+# 헬스체크만 노출하고 Redis는 제외 (기능명세서 10장)
 management:
   endpoints:
     web:

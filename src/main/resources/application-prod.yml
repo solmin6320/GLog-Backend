@@ -2,7 +2,7 @@
 # 접속 정보·주소는 기본값을 두지 않는다. 환경변수가 하나라도 빠지면 기동이 실패한다
 spring:
   datasource:
-    # Neon은 TLS 접속만 받는다. sslmode는 ProdProfileValidator가 require 이상인지 검사한다
+    # 운영 DB는 TLS로만 접속한다. sslmode는 ProdProfileValidator가 require 이상인지 검사한다
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
