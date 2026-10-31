@@ -1,7 +1,7 @@
 # 잔디로그 백엔드 (GLog-Backend)
 
 백엔드 전용 프로젝트. 리포: https://github.com/solmin6320/GLog-Backend
-스택: Java 21 · Gradle(wrapper) · Spring Boot 3.x · Spring for GraphQL · Spring Security(JWT) · JPA · PostgreSQL(Flyway, 운영 Neon) · MongoDB(Atlas) · Redis(Upstash). 배포 Render(Docker).
+스택: Java 21 · Gradle(wrapper) · Spring Boot 3.x · Spring for GraphQL · Spring Security(JWT) · JPA · PostgreSQL(Flyway, 운영 Neon) · MongoDB(Atlas) · Redis(Upstash). 배포 AWS Lightsail(Docker).
 
 ## 철칙
 
@@ -51,7 +51,7 @@
 | 인증 | JWT 만료 12시간(HS256, Refresh 없음). 첫 관리자는 환경변수 `ADMIN_GITHUB_IDS`(GitHub 숫자 id)로 로그인 시 승격, 자동 강등 없음 |
 | 앱 딥링크 | 기본값 `com.jandilog.app://auth` (설정으로 변경 가능) |
 | 접근 제어 | 루트 필드 기본 거부(공개 `exchangeAuthCode`, 로그인만 `me`, 나머지는 ACTIVE 회원). 쿼리 깊이 10·복잡도 50 |
-| 인프라 | 배포 Render(Docker), DB Neon(PostgreSQL), CI/CD GitHub Actions, MongoDB Atlas M0(리전 AWS), Redis Upstash (2026-10-30 변경, 아래 "DB·배포 변경") |
+| 인프라 | 배포 AWS Lightsail(Docker), DB Neon(PostgreSQL), CI/CD GitHub Actions, MongoDB Atlas M0(리전 AWS), Redis Upstash (2026-10-30 DB 변경, 2026-10-31 배포 변경, 아래 "DB·배포 변경"·"배포 AWS 변경") |
 | 잔디 조회 | 서버 전용 GitHub 토큰(`GITHUB_API_TOKEN`) |
 | 글 팀 연결 | 작성·수정 때 새로 연결하거나 바꾸는 팀만 소속 검사. 이미 연결된 팀을 그대로 두는 수정은 다시 검사하지 않음(팀을 나간 뒤에도 글 수정 가능, 2026-10-04 사용자 확정) |
 | Q-13 경고 이력 표시 | 벌칙 이행 이전에 받은 경고는 이력(내 경고 · 벌칙)에 상태 "이행 완료"로 표시하고, 현재 경고 수와 프로필 팀별 경고에는 넣지 않음(2026-10-06 사용자 확정) |
@@ -69,7 +69,8 @@
 | 늦게 만든 경고의 팀 변동 | 2026-10-30. 주가 끝난 뒤 만든 미달 경고(월요일 판정 전 추방, 보류 재실행, 기동 시 보충, 미달 정정)에도 소속 스냅샷 뒤의 추방·팀 삭제를 반영한다. 그때 경고가 있었다면 빠졌을 카테고리는 빼고 아이디 초대 복귀는 남기며, 남은 카테고리가 없으면 마지막 사유로 삭제 표시. 정정 미리보기도 같은 규칙(`TeamWarningService.applyTeamChangesSince`, PR #73) |
 | 잔디 조회 계정 확인 | 2026-10-30. 잔디 조회 응답의 GitHub 숫자 id(`databaseId`)가 회원의 github_id와 다르면 IDENTITY_MISMATCH 보류(Q-09와 같은 처리). 회원이 아이디를 바꾼 뒤 남이 그 아이디를 가져가 남의 잔디로 판정되는 것을 막는다. GitHub 호출 횟수는 그대로 |
 | 게시판 검색·승인 대기 회원 | 2026-10-30 사용자 결정: 게시판 검색은 기획서대로 어절 단위 유지("서버"로 "서버를"은 못 찾음, 관리자 게시물 검색만 부분 일치). 가입 승인 폐지 전의 승인 대기 회원은 일괄 활성화하지 않고 가입 승인 탭에서 처리 |
-| DB·배포 변경 | 2026-10-30 사용자 지시: "Render·Neon을 써야 한다". 관계형 DB를 MariaDB에서 PostgreSQL 16으로 바꾸고(Neon), 앱은 Render에 Docker로 배포한다. Flyway V1~V5를 PostgreSQL 문법으로 다시 썼다(ENUM은 VARCHAR + CHECK, 시각은 TIMESTAMP). 운영 DB 접속은 `DB_SSL_MODE=require` 이상만 허용. 서버 포트는 `SERVER_PORT`, 없으면 Render의 `PORT`. MongoDB는 Atlas, Redis는 Upstash 그대로. **기능명세서 10장(기술 스택·인프라)·DB명세서 1-0 개정 필요** |
+| DB·배포 변경 | 2026-10-30 사용자 지시: "Render·Neon을 써야 한다". 관계형 DB를 MariaDB에서 PostgreSQL 16으로 바꾸고(Neon), 앱은 Render에 Docker로 배포한다. Flyway V1~V5를 PostgreSQL 문법으로 다시 썼다(ENUM은 VARCHAR + CHECK, 시각은 TIMESTAMP). 운영 DB 접속은 `DB_SSL_MODE=require` 이상만 허용. 서버 포트는 `SERVER_PORT`, 없으면 Render의 `PORT`. MongoDB는 Atlas, Redis는 Upstash 그대로. **기능명세서 10장(기술 스택·인프라)·DB명세서 1-0 개정 필요**. 앱 배포는 2026-10-31에 AWS로 다시 변경(아래 "배포 AWS 변경") |
+| 배포 AWS 변경 | 2026-10-31 사용자 지시: 앱 배포를 Render에서 AWS Lightsail(Docker)로 바꾼다. 관계형 DB는 Neon(PostgreSQL) 그대로. 서버 포트 `SERVER_PORT` 설정과 Render용 `PORT` 대체 처리는 코드에 남아 있다 |
 
 ### 2026-10-07 에이전트 회의 결정 (사용자 위임: "기획서와 프로젝트 규칙을 위반하지 않는 선에서 결정")
 
